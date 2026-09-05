@@ -42,14 +42,18 @@ def sparse_pdf() -> bytes:
     return make_pdf([["Page 1"], ["Page 2"]])
 
 
-def sv(value, page) -> SourcedValue:
-    return SourcedValue(value=value, page=page)
+def sv(value, page, confidence="high") -> SourcedValue:
+    if value is None:
+        confidence = None
+    return SourcedValue(value=value, page=page, confidence=confidence)
 
 
 @pytest.fixture
 def sample_extraction() -> QuoteExtraction:
-    """A plausible LLM result, including deliberately bad page citations."""
+    """A plausible LLM result, including deliberately bad page citations,
+    an uncertain value, and a missing confidence flag."""
     return QuoteExtraction(
+        document_type="insurer_quote",
         insurer=sv("ACME Credit Insurance plc", 1),
         annual_turnover=sv("GBP 12,000,000", 1),
         premium_rate=sv("0.055%", 1),
@@ -57,12 +61,15 @@ def sample_extraction() -> QuoteExtraction:
         minimum_annual_premium=sv(None, None),
         credit_limit_charges=sv(None, None),
         indemnity=sv("90%", 99),                        # out-of-range page
-        excess=sv("GBP 5,000", 2),
+        excess=SourcedValue(value="GBP 5,000", page=2, confidence=None),  # unflagged
         excess_type=sv("Minimum Retention Each and Every Loss", 2),
         max_annual_liability=sv(None, None),
-        discretionary_limit=sv("GBP 20,000", 2),
+        discretionary_limit=sv("GBP 20,000", 2, confidence="uncertain"),
         max_terms_of_payment=sv(None, None),
         max_extension_period=sv(None, None),
+        countries_covered=sv("United Kingdom, Ireland, Germany", 2),
+        exclusions=sv("Sales to government entities excluded", 2, confidence="uncertain"),
+        special_conditions=sv(None, None),
         additional_info=sv(None, None),
         buyer_credit_limits=[BuyerCreditLimit(
             buyer_name="Example Ltd", company_number="01234567",

@@ -64,11 +64,18 @@ detects digital vs scanned). Response (abridged):
 {
   "meta": { "filename": "quote.pdf", "page_count": 4,
             "extraction_engine": "pymupdf", "llm_model": "gpt-4o-2024-08-06" },
+  "review": {
+    "missing_fields": ["minimum_annual_premium"],
+    "uncertain_fields": ["discretionary_limit"]
+  },
   "data": {
-    "insurer":  { "value": "Atradius", "page": 1 },
-    "excess":   { "value": "£5,000",   "page": 2 },
-    "excess_type": { "value": "Each and Every Loss", "page": 2 },
-    "minimum_annual_premium": { "value": null, "page": null },
+    "document_type": "insurer_quote",
+    "insurer":  { "value": "Atradius", "page": 1, "confidence": "high" },
+    "excess":   { "value": "£5,000",   "page": 2, "confidence": "high" },
+    "excess_type": { "value": "Each and Every Loss", "page": 2, "confidence": "high" },
+    "discretionary_limit": { "value": "£20,000", "page": 3, "confidence": "uncertain" },
+    "minimum_annual_premium": { "value": null, "page": null, "confidence": null },
+    "countries_covered": { "value": "UK, Ireland, Germany", "page": 2, "confidence": "high" },
     "buyer_credit_limits": [
       { "buyer_name": "Example Ltd", "company_number": "01234567",
         "limit_required": "£250,000", "limit_offered": "£200,000", "page": 3 }
@@ -76,6 +83,12 @@ detects digital vs scanned). Response (abridged):
   }
 }
 ```
+
+The 18 extracted fields: document type, insurer, turnover, premium rate,
+est. annual premium (exc IPT), minimum premium, credit-limit charges,
+indemnity, excess, excess type, max annual liability, discretionary limit,
+payment terms, extension period, countries covered, exclusions, special
+conditions, additional info — plus the buyer credit-limit array.
 
 ## Extraction rules
 
@@ -87,6 +100,12 @@ detects digital vs scanned). Response (abridged):
    `excess_type`, which keeps the insurer's original wording.
 4. **Ignored fields** — "Type of policy" and "Debt collection support" are set
    by broker rules and are absent from the extraction schema entirely.
+5. **Review flags** — every value carries a `confidence` (`high`/`uncertain`);
+   the `review` block lists missing and uncertain fields (computed
+   server-side, never by the LLM) so the UI can highlight what a broker must
+   verify before the comparison is exported.
+6. **Document type** — each upload is classified as `insurer_quote`,
+   `credit_limit_schedule`, `policy_document`, or `other`.
 
 ## Development
 

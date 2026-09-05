@@ -28,18 +28,26 @@ POST /extract-quote (PDF upload, ≤25 MB, ≤60 pages)
    compiled from the Pydantic model in app/models/schemas.py
         │
         ▼
- app/services/pipeline.py :: _sanitize_pages
-   hallucinated / out-of-range page citations cleared, values kept
+ app/services/pipeline.py :: _sanitize + _build_review
+   hallucinated / out-of-range page citations cleared (values kept),
+   confidence flags made consistent, then missing/uncertain fields
+   summarized deterministically — never by the LLM
         │
         ▼
- ExtractionResponse JSON (meta + data)
+ ExtractionResponse JSON (meta + review + data)
 ```
 
 ## Design decisions
 
-- **Never guess** — every scalar is `{value, page}`; a missing value is
-  `{null, null}`. The schema makes placeholders indistinguishable from data,
-  so the prompt forbids them and nullable types enforce it.
+- **Never guess** — every scalar is `{value, page, confidence}`; a missing
+  value is `{null, null, null}`. The schema makes placeholders
+  indistinguishable from data, so the prompt forbids them and nullable types
+  enforce it.
+- **Uncertainty is surfaced, not hidden** — the LLM marks shaky values
+  `confidence: "uncertain"`; the server then computes the `review` block
+  (missing + uncertain field lists) deterministically, and the UI shows an
+  amber highlight with a `?` chip. A broker editing a cell counts as human
+  verification and clears the flag.
 - **Ignored fields** ("Type of policy", "Debt collection support") are absent
   from the schema itself — the model *cannot* return them.
 - **`excess_type` is never normalized** — the insurer's original wording is a

@@ -36,6 +36,9 @@ const FIELDS = [
   { key: 'discretionary_limit', label: 'Discretionary limit' },
   { key: 'max_terms_of_payment', label: 'Max terms of payment' },
   { key: 'max_extension_period', label: 'Max extension period' },
+  { key: 'countries_covered', label: 'Countries covered' },
+  { key: 'exclusions', label: 'Exclusions' },
+  { key: 'special_conditions', label: 'Special conditions' },
   { key: 'additional_info', label: 'Additional info', note: 'Free-format' },
 ];
 const CONFIRM_KEYS = ['premium', 'indemnity', 'excess', 'maxLiability'];
@@ -170,13 +173,22 @@ function kindLabel(kind) {
   return kind === 'limits' ? 'credit-limit doc' : kind === 'expiring' ? 'expiring policy' : 'quote';
 }
 
+const DOC_TYPE_LABELS = {
+  insurer_quote: 'quote', credit_limit_schedule: 'credit-limit schedule',
+  policy_document: 'policy document', other: 'document',
+};
+
 function applyExtraction(p, entry, body, kind) {
   const d = body.data;
   const insurer = d.insurer && d.insurer.value ? d.insurer.value : null;
+  const review = body.review || { missing_fields: [], uncertain_fields: [] };
+  const nCheck = review.uncertain_fields.length;
   entry.status = 'extracted';
-  entry.meta = (insurer || 'Unrecognised insurer') + ' · ' + kindLabel(kind)
+  entry.meta = (insurer || 'Unrecognised insurer')
+    + ' · ' + (DOC_TYPE_LABELS[d.document_type] || kindLabel(kind))
     + (body.meta.extraction_engine === 'azure_document_intelligence' ? ' (scanned)' : '')
-    + ' · ' + body.meta.page_count + ' pages';
+    + ' · ' + body.meta.page_count + ' pages'
+    + (nCheck ? ' · ' + nCheck + ' value' + (nCheck === 1 ? '' : 's') + ' to verify' : '');
 
   if (kind === 'limits') {
     // Attribute offers to the matching insurer column if one exists.
@@ -196,7 +208,9 @@ function applyExtraction(p, entry, body, kind) {
   for (const f of FIELDS) {
     if (f.set) continue;
     const sv = d[f.key];
-    if (sv && typeof sv === 'object') col.data[f.key] = { value: sv.value || '', page: sv.page };
+    if (sv && typeof sv === 'object') {
+      col.data[f.key] = { value: sv.value || '', page: sv.page, conf: sv.confidence };
+    }
   }
   if (kind === 'expiring') p.columns.unshift(col); else p.columns.push(col);
   entry.colId = col.id;
@@ -227,10 +241,15 @@ function cellPage(col, field) {
   const sv = col.data[field.key];
   return sv && sv.page ? sv.page : null;
 }
+function cellUncertain(col, field) {
+  const sv = col.data[field.key];
+  return !!(sv && sv.conf === 'uncertain' && sv.value);
+}
 function cellBg(p, col, field) {
   if (col.id === p.recommended) return 'var(--rec)';
   if (field.set) return 'var(--set-soft)';
   if (field.confirm && !p.confirmed[field.confirm]) return 'var(--warn-soft)';
+  if (cellUncertain(col, field)) return 'var(--warn-soft)';
   return 'transparent';
 }
 function allConfirmed(p) { return CONFIRM_KEYS.every(k => p.confirmed[k]); }
@@ -579,6 +598,7 @@ function renderReview(p) {
         <td style="padding:0;border-bottom:1px solid var(--line2);border-left:1px solid var(--line2);background:${cellBg(p, col, f)};vertical-align:middle">
           <div style="display:flex;align-items:center;gap:6px;padding:4px 8px">
             <input class="cell-input" data-edit="cell" data-col="${col.id}" data-field="${f.key}" value="${esc(cellValue(p, col, f))}" placeholder="—">
+            ${cellUncertain(col, f) ? `<span class="mono" title="AI marked this value uncertain — verify against the source page (editing the cell clears the flag)" style="flex:none;font-size:10px;font-weight:500;color:var(--warn);background:#fff;border:1px solid var(--warn);border-radius:4px;padding:1px 5px;cursor:help">?</span>` : ''}
             ${page ? `<button class="src-chip" data-act="openSource" data-arg="${esc(col.name)} quote · p${page}" title="Open source page">p${page}</button>` : ''}
           </div>
         </td>`;
@@ -594,7 +614,7 @@ function renderReview(p) {
       </div>
       <div style="display:flex;gap:16px;font-size:11.5px;color:var(--ink2);align-items:center">
         <span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--set-soft);border:1px solid var(--set)"></span>Set field</span>
-        <span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--warn-soft);border:1px solid var(--warn)"></span>Confirm before export</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--warn-soft);border:1px solid var(--warn)"></span>Confirm / AI-uncertain</span>
         <span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--rec);border:1px solid var(--accent)"></span>Recommended</span>
       </div>
     </div>
@@ -897,11 +917,17 @@ document.addEventListener('change', e => {
       const col = p && p.columns.find(c => c.id === el.dataset.col);
       if (col) {
         const k = el.dataset.field;
-        // Editing clears the page link only if the value actually changed —
-        // an edited cell no longer matches its source page verbatim.
+        // An edited value no longer matches its source page verbatim, so the
+        // page link is cleared on change; a broker touching the cell also
+        // counts as human verification, clearing any AI-uncertain flag.
         const prev = col.data[k];
-        col.data[k] = { value: v, page: prev && prev.value === v ? prev.page : null };
+        const unchanged = prev && prev.value === v;
+        const wasUncertain = prev && prev.conf === 'uncertain';
+        col.data[k] = { value: v, page: unchanged ? prev.page : null, conf: 'high' };
         touch(p);
+        // Change fires on blur, so re-rendering to drop the amber
+        // uncertain highlight doesn't steal focus mid-edit.
+        if (wasUncertain) render();
       }
       break;
     }

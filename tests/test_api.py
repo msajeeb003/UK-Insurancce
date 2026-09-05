@@ -80,9 +80,19 @@ def test_happy_path_with_stubbed_llm(client, digital_pdf, sample_extraction, mon
 
     assert body["meta"]["extraction_engine"] == "pymupdf"
     assert body["meta"]["page_count"] == 2
-    assert body["data"]["insurer"] == {"value": "ACME Credit Insurance plc", "page": 1}
+    assert body["data"]["document_type"] == "insurer_quote"
+    assert body["data"]["insurer"] == {
+        "value": "ACME Credit Insurance plc", "page": 1, "confidence": "high",
+    }
     # The sanitizer must have cleared the hallucinated page citation.
-    assert body["data"]["indemnity"] == {"value": "90%", "page": None}
+    assert body["data"]["indemnity"] == {
+        "value": "90%", "page": None, "confidence": "high",
+    }
+    # New comparison fields are present.
+    assert body["data"]["countries_covered"]["value"] == "United Kingdom, Ireland, Germany"
+    # The review summary flags what a broker must check.
+    assert "special_conditions" in body["review"]["missing_fields"]
+    assert set(body["review"]["uncertain_fields"]) == {"discretionary_limit", "exclusions"}
     # Ignored fields must not exist in the response at all.
     assert "type_of_policy" not in body["data"]
     assert "debt_collection_support" not in body["data"]

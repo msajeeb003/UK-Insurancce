@@ -6,13 +6,15 @@ Two groups:
 1. LLM-facing models (`QuoteExtraction` + children) — passed to the OpenAI
    Responses API as the Structured Output schema. Strict mode is enforced by
    the SDK, so the model can ONLY return this exact shape. Every scalar field
-   is a `SourcedValue`: the raw value as written in the document plus the PDF
-   page number it was found on. A missing value is `value=null, page=null` —
-   the schema itself makes "guess a placeholder" impossible to distinguish
-   from real data, so the prompt + nullable types together enforce Rule 1.
+   is a `SourcedValue`: the raw value as written in the document, the PDF
+   page number it was found on, and a confidence flag. A missing value is
+   `value=null, page=null, confidence=null` — the schema itself makes
+   "guess a placeholder" impossible to distinguish from real data, so the
+   prompt + nullable types together enforce Rule 1.
 
-2. API-facing models (`ExtractionResponse`) — what `/extract-quote` returns,
-   wrapping the extraction with processing metadata.
+2. API-facing models (`ExtractionResponse`) — what `/extract-quote` returns:
+   processing metadata, a review summary (missing / uncertain fields,
+   computed server-side, never by the LLM), and the extraction itself.
 
 Deliberately ABSENT fields (Rule 4 — set by broker rules, never extracted):
   - Type of policy
@@ -22,6 +24,19 @@ Deliberately ABSENT fields (Rule 4 — set by broker rules, never extracted):
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+# "high"     -> the document states the value plainly.
+# "uncertain"-> ambiguous wording, poor OCR, conflicting figures, or a value
+#               inferred from context rather than an explicit label. The UI
+#               highlights these for broker verification before export.
+Confidence = Literal["high", "uncertain"]
+
+DocumentType = Literal[
+    "insurer_quote",          # a quotation / indication of terms
+    "credit_limit_schedule",  # standalone buyer credit-limit schedule
+    "policy_document",        # full policy wording / expiring policy
+    "other",                  # anything else (e-mail print, letter, ...)
+]
 
 # ─────────────────────────────────────────────────────────────────────────
 #  LLM-facing structured-output models
@@ -42,6 +57,15 @@ class SourcedValue(BaseModel):
             "1-based PDF page number where this value was found, taken from "
             "the '=== PAGE n ===' markers in the input text. null if the "
             "value is null."
+        )
+    )
+    confidence: Confidence | None = Field(
+        description=(
+            "'high' when the document states the value plainly under a clear "
+            "label. 'uncertain' when the wording is ambiguous, the text looks "
+            "OCR-garbled, several conflicting figures appear, or the value "
+            "had to be read from context rather than an explicit label. "
+            "null if (and only if) value is null."
         )
     )
 
@@ -73,10 +97,18 @@ class BuyerCreditLimit(BaseModel):
 
 
 class QuoteExtraction(BaseModel):
-    """The fixed JSON structure every insurer quote is normalized into."""
+    """The fixed JSON structure every insurer document is normalized into."""
 
+    document_type: DocumentType = Field(
+        description=(
+            "What this document is: 'insurer_quote' for a quotation or "
+            "indication of terms; 'credit_limit_schedule' for a standalone "
+            "buyer credit-limit schedule; 'policy_document' for full policy "
+            "wording (e.g. the expiring policy); 'other' if none fit."
+        )
+    )
     insurer: SourcedValue = Field(
-        description="Name of the insurance company issuing the quote."
+        description="Name of the insurance company issuing the document."
     )
     annual_turnover: SourcedValue = Field(
         description=(
@@ -159,12 +191,38 @@ class QuoteExtraction(BaseModel):
             "'Maximum Extension Period', 'MEP', 'Grace Period'."
         )
     )
+    countries_covered: SourcedValue = Field(
+        description=(
+            "Countries / territories the cover applies to, as a comma-"
+            "separated list verbatim from the document. Normalize from "
+            "'Countries Covered', 'Territorial Scope', 'Insured Countries', "
+            "'Country Schedule', 'Whole World excluding ...' (keep the "
+            "exclusion wording)."
+        )
+    )
+    exclusions: SourcedValue = Field(
+        description=(
+            "What the policy explicitly does NOT cover: excluded buyers, "
+            "sectors, countries or debt types. Concise summary using the "
+            "document's own wording. Normalize from 'Exclusions', 'Excluded "
+            "Risks', 'Not Covered', 'Excluded Buyers/Sectors'."
+        )
+    )
+    special_conditions: SourcedValue = Field(
+        description=(
+            "Conditions the insured must meet for cover to apply: warranties, "
+            "subjectivities, conditions precedent, reporting obligations "
+            "specific to this quote. Concise summary using the document's own "
+            "wording. Normalize from 'Special Conditions', 'Warranties', "
+            "'Subjectivities', 'Conditions Precedent'."
+        )
+    )
     additional_info: SourcedValue = Field(
         description=(
-            "Free-format text: any material conditions, warranties, "
-            "exclusions, special terms or notes a broker should see that do "
-            "not fit the fields above. Concise plain text; null if nothing "
-            "noteworthy."
+            "Free-format text: any other material notes a broker should see "
+            "that fit none of the fields above (e.g. no-claims bonus, "
+            "premium payment schedule). Concise plain text; null if nothing "
+            "noteworthy. Do NOT repeat exclusions or special conditions here."
         )
     )
     buyer_credit_limits: list[BuyerCreditLimit] = Field(
@@ -189,8 +247,24 @@ class ProcessingMeta(BaseModel):
     llm_model: str
 
 
+class ReviewSummary(BaseModel):
+    """
+    What a broker must look at before the comparison is presentation-ready.
+    Computed deterministically by the server from the extraction — never by
+    the LLM — so the UI can rely on it.
+    """
+
+    missing_fields: list[str] = Field(
+        description="Field names with no value found in the document."
+    )
+    uncertain_fields: list[str] = Field(
+        description="Field names extracted with 'uncertain' confidence — verify against the source page."
+    )
+
+
 class ExtractionResponse(BaseModel):
     """Response body of POST /extract-quote."""
 
     meta: ProcessingMeta
+    review: ReviewSummary
     data: QuoteExtraction

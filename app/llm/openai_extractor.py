@@ -76,6 +76,24 @@ Extract the requested fields following these STRICT rules:
    only fill `estimated_annual_premium_exc_ipt` when the document makes
    clear the figure excludes IPT (or IPT is stated separately); otherwise
    leave it null.
+
+8. DOCUMENT TYPE. Classify what you were given: 'insurer_quote' for a
+   quotation / indication of terms; 'credit_limit_schedule' for a
+   standalone buyer credit-limit schedule; 'policy_document' for full
+   policy wording (e.g. an expiring policy); 'other' if none fit.
+
+9. CONFIDENCE. For every non-null value set `confidence`:
+   - 'high'      -> the document states it plainly under a clear label.
+   - 'uncertain' -> ambiguous wording, garbled/OCR-damaged text,
+                    conflicting figures in different places, or a value you
+                    had to read from context rather than an explicit label.
+   Marking a shaky value 'uncertain' is ALWAYS better than presenting it
+   as certain — a broker will verify it against the source page. Set
+   confidence to null if (and only if) the value is null.
+
+10. `exclusions` and `special_conditions` are separate fields — do not
+    fold them into `additional_info`. Keep each a concise summary in the
+    document's own wording.
 """
 
 

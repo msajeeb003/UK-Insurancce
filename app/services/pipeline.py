@@ -17,39 +17,70 @@ from app.extraction.base import PageText, to_tagged_document
 from app.extraction.detector import PdfKind, classify_pdf, open_pdf
 from app.extraction.pymupdf_extractor import extract_pages_pymupdf
 from app.llm.openai_extractor import extract_quote_fields
-from app.models.schemas import ExtractionResponse, ProcessingMeta, QuoteExtraction
+from app.models.schemas import (
+    ExtractionResponse,
+    ProcessingMeta,
+    QuoteExtraction,
+    ReviewSummary,
+    SourcedValue,
+)
 
 logger = logging.getLogger(__name__)
 
 EngineOverride = Literal["auto", "digital", "azure"]
 
 
-def _sanitize_pages(extraction: QuoteExtraction, page_count: int) -> QuoteExtraction:
+def _sourced_fields(extraction: QuoteExtraction) -> list[tuple[str, SourcedValue]]:
+    """(field_name, SourcedValue) pairs, in schema order."""
+    return [
+        (name, item)
+        for name in type(extraction).model_fields
+        if isinstance(item := getattr(extraction, name), SourcedValue)
+    ]
+
+
+def _sanitize(extraction: QuoteExtraction, page_count: int) -> QuoteExtraction:
     """
     Defensive pass over the LLM output:
     - a cited page outside the document's range is nulled (value kept);
-    - a null value must not carry a page.
-    Structured Outputs makes schema violations impossible, but page-number
-    hallucination is still semantically possible — this keeps source links
-    trustworthy for the broker UI.
+    - a null value must not carry a page or a confidence;
+    - a non-null value with no confidence defaults to 'high' (unflagged).
+    Structured Outputs makes schema violations impossible, but semantic
+    slips (hallucinated pages, inconsistent confidence) are still possible —
+    this keeps source links and review flags trustworthy for the broker UI.
     """
-    for field_name in type(extraction).model_fields:
-        item = getattr(extraction, field_name)
-        if hasattr(item, "page") and hasattr(item, "value"):
-            if item.value is None:
-                item.page = None
-            elif item.page is not None and not (1 <= item.page <= page_count):
-                logger.warning(
-                    "Field %r cited out-of-range page %s (doc has %d pages) — "
-                    "clearing page link", field_name, item.page, page_count,
-                )
-                item.page = None
+    for field_name, item in _sourced_fields(extraction):
+        if item.value is None:
+            item.page = None
+            item.confidence = None
+            continue
+        if item.page is not None and not (1 <= item.page <= page_count):
+            logger.warning(
+                "Field %r cited out-of-range page %s (doc has %d pages) — "
+                "clearing page link", field_name, item.page, page_count,
+            )
+            item.page = None
+        if item.confidence is None:
+            item.confidence = "high"
 
     for row in extraction.buyer_credit_limits:
         if row.page is not None and not (1 <= row.page <= page_count):
             row.page = None
 
     return extraction
+
+
+def _build_review(extraction: QuoteExtraction) -> ReviewSummary:
+    """
+    Deterministic review summary for the UI / presentation gate — computed
+    from the sanitized extraction, never asked of the LLM.
+    """
+    missing = [name for name, item in _sourced_fields(extraction) if item.value is None]
+    uncertain = [
+        name for name, item in _sourced_fields(extraction)
+        if item.confidence == "uncertain"
+    ]
+    return ReviewSummary(missing_fields=missing, uncertain_fields=uncertain)
 
 
 async def run_extraction_pipeline(
@@ -102,8 +133,8 @@ async def run_extraction_pipeline(
     # ── 3. LLM structured extraction (blocking SDK call -> thread) ───────
     extraction = await asyncio.to_thread(extract_quote_fields, tagged_text)
 
-    # ── 4. Defensive validation of source links ──────────────────────────
-    extraction = _sanitize_pages(extraction, page_count)
+    # ── 4. Defensive validation + review summary ─────────────────────────
+    extraction = _sanitize(extraction, page_count)
 
     return ExtractionResponse(
         meta=ProcessingMeta(
@@ -112,5 +143,6 @@ async def run_extraction_pipeline(
             extraction_engine=engine_used,
             llm_model=settings.openai_model,
         ),
+        review=_build_review(extraction),
         data=extraction,
     )
