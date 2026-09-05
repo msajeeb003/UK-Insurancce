@@ -728,18 +728,21 @@ function renderReview(p) {
 /* ── S6 Credit limits ──────────────────────────────────────────────── */
 function renderLimits(p) {
   const th = (txt, extra) => `<th style="text-align:left;padding:12px 14px;font:500 11px 'IBM Plex Mono';letter-spacing:.4px;text-transform:uppercase;color:var(--ink3);background:var(--panel);border-bottom:1px solid var(--line);${extra || ''}">${txt}</th>`;
+  // Wide enough that names, limits and the "Not reviewed" placeholder never
+  // truncate; the card scrolls horizontally when columns outgrow it.
+  const tableMin = 470 + p.columns.length * 130;
   const rows = p.credit.map(r => `
     <tr>
-      <td style="padding:2px 8px;border-bottom:1px solid var(--line2)"><input class="cell-input" style="font-weight:500;padding:8px 6px" data-edit="credit" data-row="${r.id}" data-part="buyer" value="${esc(r.buyer)}"></td>
-      <td style="padding:2px 6px;border-bottom:1px solid var(--line2)"><input class="cell-input mono" style="font-size:12.5px;color:var(--ink2);padding:8px 6px" data-edit="credit" data-row="${r.id}" data-part="reg" value="${esc(r.reg)}"></td>
-      <td style="padding:2px 6px;border-bottom:1px solid var(--line2)"><input class="cell-input" style="padding:8px 6px" data-edit="credit" data-row="${r.id}" data-part="req" value="${esc(r.req)}"></td>
+      <td style="padding:2px 8px;border-bottom:1px solid var(--line2)"><input class="cell-input" style="font-weight:500;padding:8px 6px" data-edit="credit" data-row="${r.id}" data-part="buyer" value="${esc(r.buyer)}" placeholder="Buyer name"></td>
+      <td style="padding:2px 6px;border-bottom:1px solid var(--line2)"><input class="cell-input mono" style="font-size:12.5px;color:var(--ink2);padding:8px 6px" data-edit="credit" data-row="${r.id}" data-part="reg" value="${esc(r.reg)}" placeholder="—"></td>
+      <td style="padding:2px 6px;border-bottom:1px solid var(--line2)"><input class="cell-input" style="padding:8px 6px" data-edit="credit" data-row="${r.id}" data-part="req" value="${esc(r.req)}" placeholder="—"></td>
       ${p.columns.map(col => {
         const v = r.offers[col.id] || '';
         return `<td style="padding:2px 6px;border-bottom:1px solid var(--line2);border-left:1px solid var(--line2);background:${col.id === p.recommended ? 'var(--rec)' : 'transparent'}">
           <input class="cell-input" style="padding:8px 6px;font-style:${v ? 'normal' : 'italic'}" data-edit="credit" data-row="${r.id}" data-part="offer" data-col="${col.id}" value="${esc(v)}" placeholder="Not reviewed">
         </td>`;
       }).join('')}
-      <td style="text-align:center;border-bottom:1px solid var(--line2)"><span data-act="removeCredit" data-arg="${r.id}" style="color:var(--ink3);cursor:pointer;font-size:16px">×</span></td>
+      <td style="text-align:center;border-bottom:1px solid var(--line2)"><span data-act="removeCredit" data-arg="${r.id}" title="Remove buyer row" style="color:var(--ink3);cursor:pointer;font-size:16px">×</span></td>
     </tr>`).join('');
   return `
   <div>
@@ -748,13 +751,22 @@ function renderLimits(p) {
         <h1 style="font-size:26px;margin:0 0 6px;font-weight:700;letter-spacing:-.4px">Buyer credit limits</h1>
         <p style="color:var(--ink2);font-size:13.5px;margin:0">Fully editable — add rows for facilities agreed offline that appear in no document.</p>
       </div>
-      <button class="btn-soft" style="padding:9px 15px" data-act="addCredit">${ICON.plus}Add buyer</button>
+      <button class="btn-soft" style="padding:9px 15px;flex:none" data-act="addCredit">${ICON.plus}Add buyer</button>
     </div>
     <div class="card" style="overflow:hidden;overflow-x:auto">
-      <table class="grid-table">
+      <table class="grid-table" style="min-width:${tableMin}px">
         <thead><tr>
-          ${th('Buyer', 'padding:12px 16px;')}${th('Company no.')}${th('Required')}
-          ${p.columns.map(col => `<th style="text-align:left;padding:12px 14px;font-size:13px;font-weight:600;color:${col.id === p.recommended ? 'var(--accent)' : 'var(--ink)'};background:${col.id === p.recommended ? 'var(--rec)' : 'var(--panel)'};border-bottom:1px solid var(--line);border-left:1px solid var(--line2)">${esc(col.name)}</th>`).join('')}
+          ${th('Buyer', 'padding:12px 16px;min-width:170px;')}${th('Company no.', 'min-width:120px;')}${th('Required', 'min-width:120px;')}
+          ${p.columns.map(col => {
+            const isRec = col.id === p.recommended;
+            return `<th style="text-align:left;padding:12px 14px;min-width:130px;background:${isRec ? 'var(--rec)' : 'var(--panel)'};border-bottom:1px solid var(--line);border-left:1px solid var(--line2)">
+              <div style="display:flex;align-items:center;gap:7px">
+                <span style="font-size:13px;font-weight:600;color:${isRec ? 'var(--accent)' : 'var(--ink)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(col.name)}</span>
+                ${col.manual ? `<span data-act="removeColumn" data-arg="${col.id}" title="Remove this free-format column (also removes it from the comparison)" style="flex:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1">×</span>` : ''}
+              </div>
+              ${col.manual ? `<span class="mono" style="display:inline-block;margin-top:4px;font-size:9px;font-weight:500;color:var(--warn);background:var(--warn-soft);padding:2px 6px;border-radius:4px">FREE FORMAT</span>` : ''}
+            </th>`;
+          }).join('')}
           <th style="background:var(--panel);border-bottom:1px solid var(--line);width:40px"></th>
         </tr></thead>
         <tbody>${rows || `<tr><td colspan="${4 + p.columns.length}" style="padding:34px;text-align:center;color:var(--ink3);font-size:13px">No buyer limits — extracted rows appear here, or add one manually.</td></tr>`}</tbody>
