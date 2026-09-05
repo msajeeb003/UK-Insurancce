@@ -173,6 +173,76 @@ function kindLabel(kind) {
   return kind === 'limits' ? 'credit-limit doc' : kind === 'expiring' ? 'expiring policy' : 'quote';
 }
 
+/* ── Demo data (wireframe sample) — lets the whole flow be exercised
+      without uploads or API credits ─────────────────────────────────── */
+function buildDemoColumns() {
+  const sv = (v, page, conf) => ({ value: v, page, conf: conf || 'high' });
+  const mk = (id, name, debt, d) => ({
+    id, name, manual: false, debt, fileName: name.replace(/ /g, '-') + '_quote.pdf', data: d,
+  });
+  return [
+    mk('demo-a', 'Insurer A', 'Included', {
+      annual_turnover: sv('£4,500,000', 2), premium_rate: sv('0.32%', 3),
+      estimated_annual_premium_exc_ipt: sv('£14,400', 3), minimum_annual_premium: sv('£10,000', 3),
+      credit_limit_charges: sv('Included', 4), indemnity: sv('90%', 5),
+      excess: sv('£1,000', 5), excess_type: sv('Minimum Retention', 5),
+      max_annual_liability: sv('£2,000,000', 6), discretionary_limit: sv('£25,000', 6),
+      max_terms_of_payment: sv('90 days', 7), max_extension_period: sv('60 days', 7),
+      countries_covered: sv('UK & Ireland', 7), exclusions: sv('Sales to associated companies excluded', 8),
+      special_conditions: sv('Monthly turnover declarations required', 8),
+      additional_info: sv('No-claims bonus 10%', 8),
+    }),
+    mk('demo-b', 'Insurer B', 'Included', {
+      annual_turnover: sv('£4,500,000', 1), premium_rate: sv('0.28%', 2),
+      estimated_annual_premium_exc_ipt: sv('£12,600', 2), minimum_annual_premium: sv('£9,500', 2),
+      credit_limit_charges: sv('£45 per limit', 3), indemnity: sv('90%', 3),
+      excess: sv('£2,500', 4), excess_type: sv('Deductible', 4),
+      max_annual_liability: sv('£1,500,000', 4), discretionary_limit: sv('£20,000', 5, 'uncertain'),
+      max_terms_of_payment: sv('60 days', 5), max_extension_period: sv('30 days', 5),
+      countries_covered: sv('UK, Ireland, Germany, France', 5),
+      exclusions: sv('Government buyers excluded', 6, 'uncertain'),
+      special_conditions: sv(null, null, null), additional_info: sv(null, null, null),
+    }),
+    mk('demo-c', 'Insurer C', 'Outsourced', {
+      annual_turnover: sv('£4,500,000', 2), premium_rate: sv('0.35%', 3),
+      estimated_annual_premium_exc_ipt: sv('£15,750', 4), minimum_annual_premium: sv('£11,000', 4),
+      credit_limit_charges: sv('Included', 5), indemnity: sv('85%', 6),
+      excess: sv('£1,000', 6), excess_type: sv('First Loss', 6),
+      max_annual_liability: sv('£2,500,000', 7), discretionary_limit: sv(null, null, null),
+      max_terms_of_payment: sv('120 days', 8), max_extension_period: sv('60 days', 8),
+      countries_covered: sv('Whole World excluding sanctioned countries', 8),
+      exclusions: sv(null, null, null), special_conditions: sv('Quote subject to satisfactory proposal form', 9),
+      additional_info: sv('New buyer cover to £50k', 9),
+    }),
+    { id: 'demo-m1', name: 'Insurer A — Option 2', manual: true, debt: '', data: {} },
+  ];
+}
+
+function loadDemoData(p) {
+  p.columns = buildDemoColumns();
+  p.recommended = 'demo-b';
+  p.credit = [
+    { id: 'demo-r1', buyer: 'Meridian Foods Ltd', reg: '04821990', req: '£250,000',
+      offers: { 'demo-a': '£250,000', 'demo-b': '£200,000', 'demo-c': '£250,000' } },
+    { id: 'demo-r2', buyer: 'Harbord Retail Group', reg: '07733120', req: '£120,000',
+      offers: { 'demo-a': '£120,000', 'demo-b': '£120,000', 'demo-c': '£100,000' } },
+    { id: 'demo-r3', buyer: 'Castle Logistics Ltd', reg: '09912004', req: '£80,000',
+      offers: { 'demo-a': '£75,000', 'demo-c': '£80,000' } },
+  ];
+  p.files = [
+    { id: 'demo-f1', name: 'Insurer-A_quote_2026.pdf', kind: 'quote', ext: 'PDF',
+      status: 'extracted', meta: 'Insurer A · quote · 8 pages · demo data', colId: 'demo-a' },
+    { id: 'demo-f2', name: 'Insurer-B_quote.pdf', kind: 'quote', ext: 'PDF',
+      status: 'extracted', meta: 'Insurer B · quote (scanned) · 6 pages · 2 values to verify · demo data', colId: 'demo-b' },
+    { id: 'demo-f3', name: 'Insurer-C_quote.pdf', kind: 'quote', ext: 'PDF',
+      status: 'extracted', meta: 'Insurer C · quote · 9 pages · demo data', colId: 'demo-c' },
+    { id: 'demo-f4', name: 'credit-limits_schedule.pdf', kind: 'limits', ext: 'PDF',
+      status: 'extracted', meta: 'credit-limit schedule · 3 buyers · demo data' },
+  ];
+  if (!p.clientName) p.clientName = 'Aldgate Timber Ltd';
+  if (!p.approached.length) p.approached = ['allianz', 'atradius', 'coface', 'tmhcc'];
+}
+
 const DOC_TYPE_LABELS = {
   insurer_quote: 'quote', credit_limit_schedule: 'credit-limit schedule',
   policy_document: 'policy document', other: 'document',
@@ -547,7 +617,10 @@ function renderUpload(p) {
     <div class="card" style="overflow:hidden">
       <div style="padding:13px 18px;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;display:flex;justify-content:space-between;align-items:center">
         <span>Documents</span>
-        <span class="mono" style="font-size:11px;font-weight:500;color:var(--ink3)">${p.files.length} file${p.files.length === 1 ? '' : 's'}${nErr ? ' · ' + nErr + ' unreadable' : ''}</span>
+        <div style="display:flex;align-items:center;gap:12px">
+          ${p.columns.length ? '' : `<button class="btn-soft" style="padding:6px 12px;font-size:12px" data-act="loadDemo">Load demo data</button>`}
+          <span class="mono" style="font-size:11px;font-weight:500;color:var(--ink3)">${p.files.length} file${p.files.length === 1 ? '' : 's'}${nErr ? ' · ' + nErr + ' unreadable' : ''}</span>
+        </div>
       </div>
       ${filesHtml}
     </div>
@@ -583,12 +656,18 @@ function renderReview(p) {
     </th>`;
   }).join('');
 
-  const bodyRows = FIELDS.map(f => `
+  const bodyRows = FIELDS.map(f => {
+    // Key-value rows are clickable: selecting the row confirms it in the
+    // panel above (same state as the chips, so both stay in sync).
+    const isKey = !!f.confirm;
+    const keyOn = isKey && p.confirmed[f.confirm];
+    return `
     <tr>
-      <th style="text-align:left;padding:11px 16px;border-bottom:1px solid var(--line2);background:var(--surface);position:sticky;left:0;z-index:1;vertical-align:top">
+      <th ${isKey ? `data-act="toggleConfirm" data-arg="${f.confirm}" title="Click to ${keyOn ? 'un-confirm' : 'confirm'} this key value"` : ''} style="text-align:left;padding:11px 16px;border-bottom:1px solid var(--line2);background:var(--surface);position:sticky;left:0;z-index:1;vertical-align:top${isKey ? ';cursor:pointer;user-select:none' : ''}">
         <div style="display:flex;align-items:center;gap:7px">
           <span style="font-size:13px;font-weight:500;color:var(--ink)">${f.label}</span>
           ${f.tag ? `<span class="mono" style="font-size:9px;font-weight:500;padding:2px 6px;border-radius:4px;background:var(--set-soft);color:var(--set)">${f.tag}</span>` : ''}
+          ${isKey ? `<span style="margin-left:auto;flex:none;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;border:1.5px solid ${keyOn ? 'var(--ok)' : 'var(--warn)'};background:${keyOn ? 'var(--ok)' : 'transparent'};color:${keyOn ? '#fff' : 'var(--warn)'}">${keyOn ? '✓' : '○'}</span>` : ''}
         </div>
         ${f.note ? `<div style="font-size:11px;color:var(--ink3);margin-top:2px">${f.note}</div>` : ''}
       </th>
@@ -603,7 +682,8 @@ function renderReview(p) {
           </div>
         </td>`;
       }).join('')}
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
   return `
   <div>
@@ -632,7 +712,7 @@ function renderReview(p) {
         <thead><tr><th class="colhead-label">Field</th>${headCells}</tr></thead>
         <tbody>${bodyRows}</tbody>
       </table>`
-      : `<div style="padding:40px;text-align:center;color:var(--ink3);font-size:13.5px">No comparison columns yet — upload quotes on the previous step, or add a free-format column.</div>`}
+      : `<div style="padding:40px;text-align:center;color:var(--ink3);font-size:13.5px">No comparison columns yet — upload quotes on the previous step, or add a free-format column.<br><button class="btn-soft" style="margin-top:14px" data-act="loadDemo">Load demo data</button></div>`}
     </div>
     <div class="card" style="margin-top:16px;padding:16px 18px">
       <label style="display:block;font-size:12.5px;font-weight:600;color:var(--ink2);margin-bottom:8px">Free-format notes <span style="color:var(--ink3);font-weight:400">— appears beneath the comparison</span></label>
@@ -849,6 +929,16 @@ const ACTIONS = {
   },
 
   pickFile(inputId) { document.getElementById(inputId).click(); },
+
+  loadDemo() {
+    const p = proj(); if (!p) return;
+    if (p.columns.length) {
+      alert('This project already has comparison columns. Demo data loads onto an empty project — create a new project first.');
+      return;
+    }
+    loadDemoData(p);
+    touch(p); render();
+  },
 
   toggleConfirm(k) { const p = proj(); p.confirmed[k] = !p.confirmed[k]; touch(p); render(); },
   pickRec(colId) { const p = proj(); p.recommended = colId; touch(p); render(); },
