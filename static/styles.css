@@ -1,0 +1,127 @@
+/* ── Theme tokens — copied from the approved wireframe ─────────────── */
+:root {
+  --bg: #f4f5f8;
+  --surface: #ffffff;
+  --panel: #fafbfc;
+  --ink: #0f1729;
+  --ink2: #556072;
+  --ink3: #9aa4b2;
+  --line: #e8ebf0;
+  --line2: #f0f2f5;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: #eef0fe;
+  --ok: #0f9d6b;
+  --ok-soft: #e6f6ee;
+  --warn: #b45309;
+  --warn-soft: #fdf1e3;
+  --set: #7c3aed;
+  --set-soft: #f3edff;
+  --rec: #eef0fe;
+  --sh-sm: 0 1px 3px rgba(16,24,40,.05), 0 4px 14px rgba(16,24,40,.04);
+  --sh: 0 6px 20px rgba(16,24,40,.07);
+  --sh-lg: 0 16px 40px rgba(16,24,40,.12);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+input, textarea, select, button { font-family: inherit; }
+::selection { background: #e0e0fe; }
+input::placeholder, textarea::placeholder { color: #aab2bf; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+input:focus, textarea:focus, select:focus { outline: none; }
+button { transition: background .16s ease, box-shadow .16s ease, transform .08s ease; }
+button:active { transform: translateY(1px); }
+input, textarea, select { transition: border-color .16s ease, box-shadow .16s ease; }
+@keyframes qcfade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes qcspin { to { transform: rotate(360deg); } }
+
+.mono { font-family: 'IBM Plex Mono', monospace; }
+.fade { animation: qcfade .25s ease; }
+
+/* ── Buttons ───────────────────────────────────────────────────────── */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer; border: none; }
+.btn-primary { padding: 11px 20px; background: var(--accent); color: #fff;
+  box-shadow: 0 1px 2px rgba(79,70,229,.4); }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-secondary { padding: 11px 18px; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); box-shadow: var(--sh-sm); }
+.btn-soft { padding: 8px 14px; background: var(--accent-soft); color: var(--accent);
+  border: none; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; }
+.btn[disabled] { cursor: not-allowed; }
+
+/* ── Cards, inputs ─────────────────────────────────────────────────── */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: var(--sh-sm); }
+.field-label { display: block; font-size: 12.5px; font-weight: 500; color: var(--ink2);
+  margin-bottom: 6px; }
+.input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+  font-size: 14px; color: var(--ink); background: var(--surface); }
+.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+  font-size: 13.5px; color: var(--ink); resize: vertical; line-height: 1.55; }
+.textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* ── Login ─────────────────────────────────────────────────────────── */
+.login-grid { min-height: 100vh; display: grid; grid-template-columns: 1.05fr 1fr; }
+.login-hero {
+  background:
+    radial-gradient(115% 115% at 100% 0%, rgba(99,102,241,.40), transparent 52%),
+    radial-gradient(105% 105% at 0% 100%, rgba(124,58,237,.30), transparent 48%),
+    linear-gradient(155deg, #0d1226, #1a2350);
+  color: #fff; padding: 56px 60px; display: flex; flex-direction: column;
+  justify-content: space-between; }
+.logo-mark { border-radius: 8px; background: var(--accent); display: grid;
+  place-items: center; font-weight: 700; color: #fff; }
+
+/* ── Topbar ────────────────────────────────────────────────────────── */
+.topbar { height: 60px; flex: none; background: rgba(255,255,255,.82);
+  backdrop-filter: saturate(180%) blur(12px); -webkit-backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--line); display: flex; align-items: center;
+  justify-content: space-between; padding: 0 24px; position: sticky; top: 0; z-index: 20; }
+
+/* ── Tables ────────────────────────────────────────────────────────── */
+.grid-table { border-collapse: collapse; width: 100%; min-width: 720px; }
+.grid-table th.colhead-label { text-align: left; padding: 13px 16px; font-size: 11px;
+  font-family: 'IBM Plex Mono', monospace; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--ink3); background: var(--panel); border-bottom: 1px solid var(--line);
+  position: sticky; left: 0; z-index: 2; min-width: 200px; }
+.grid-table tbody tr:hover { background: var(--panel); }
+.cell-input { border: none; background: transparent; font-size: 13px; color: var(--ink);
+  width: 100%; padding: 6px 4px; border-radius: 6px; }
+.cell-input:focus { background: #fff; box-shadow: 0 0 0 2px var(--accent); }
+.head-input { border: none; background: transparent; font-size: 14px; font-weight: 600;
+  width: 100%; min-width: 0; padding: 2px 0; }
+.head-input:focus { background: #fff; box-shadow: 0 0 0 2px var(--accent);
+  border-radius: 5px; padding: 2px 5px; }
+
+/* ── Chips / badges ────────────────────────────────────────────────── */
+.status-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+  font-weight: 500; padding: 4px 11px; border-radius: 20px; }
+.src-chip { flex: none; font: 500 10px 'IBM Plex Mono', monospace; color: var(--accent);
+  cursor: pointer; opacity: .75; background: none; border: none; padding: 0; }
+.src-chip:hover { opacity: 1; text-decoration: underline; }
+
+.spin { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor;
+  border-top-color: transparent; border-radius: 50%; animation: qcspin .8s linear infinite; }
+
+/* ── Modal ─────────────────────────────────────────────────────────── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(20,28,44,.5); z-index: 60;
+  display: grid; place-items: center; padding: 30px; animation: qcfade .15s ease; }
+
+/* ── Print: only the export preview ────────────────────────────────── */
+@media print {
+  body, #app, #app > div, #app main { overflow: visible !important; height: auto !important; }
+  body * { visibility: hidden; }
+  #export-preview, #export-preview * { visibility: visible; }
+  #export-preview { position: absolute; left: 0; top: 0; width: 100%; }
+}
