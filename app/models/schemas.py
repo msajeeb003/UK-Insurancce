@@ -114,7 +114,9 @@ class QuoteExtraction(BaseModel):
         description=(
             "Insurable/estimated annual turnover the quote is based on. "
             "Normalize from terms like 'Insurable Turnover', 'Estimated "
-            "Annual Sales', 'Declared Turnover'."
+            "Insurable Turnover', 'Estimated Annual Sales', 'Declared "
+            "Turnover', 'Total Estimated Turnover'. If split (e.g. domestic "
+            "and export), give the total with the split noted."
         )
     )
     premium_rate: SourcedValue = Field(
@@ -126,9 +128,10 @@ class QuoteExtraction(BaseModel):
     estimated_annual_premium_exc_ipt: SourcedValue = Field(
         description=(
             "Estimated annual premium EXCLUDING Insurance Premium Tax. "
-            "Normalize from 'Annual Premium', 'Estimated Premium', 'Deposit "
-            "Premium'. If a figure is explicitly inclusive of IPT and no "
-            "exclusive figure is stated, return null rather than recomputing."
+            "Normalize from 'Annual Premium', 'Estimated Premium', 'Total "
+            "Estimated Premium', 'Premium Payable', 'Deposit Premium'. If a "
+            "figure is explicitly inclusive of IPT and no exclusive figure "
+            "is stated, return null rather than recomputing."
         )
     )
     minimum_annual_premium: SourcedValue = Field(
@@ -141,7 +144,8 @@ class QuoteExtraction(BaseModel):
         description=(
             "Charges for credit limit checks/decisions. Normalize from "
             "'Credit Limit Fee', 'Buyer Underwriting Charges', 'Limit "
-            "Assessment Fee', 'Credit Opinion Charges'."
+            "Assessment Fee', 'Credit Opinion Charges', 'Limit Management "
+            "Charge', 'Annual Administration Charge'."
         )
     )
     indemnity: SourcedValue = Field(
@@ -153,23 +157,25 @@ class QuoteExtraction(BaseModel):
     excess: SourcedValue = Field(
         description=(
             "Excess / deductible AMOUNT. Normalize from 'Deductible', "
-            "'Minimum Retention', 'Excess', 'Each and Every Loss Deductible', "
-            "'Aggregate First Loss'."
+            "'Minimum Retention', 'Excess', 'Uninsured Amount', 'Each and "
+            "Every Loss Deductible', 'Aggregate First Loss'."
         )
     )
     excess_type: SourcedValue = Field(
         description=(
             "The insurer's ORIGINAL wording for the kind of excess/deductible "
             "(e.g. 'Each and Every Loss', 'Aggregate First Loss', 'Non "
-            "Qualifying Loss', 'Minimum Retention'). Rule 3 exception: DO NOT "
-            "normalize this field — keep the insurer's exact terminology."
+            "Qualifying Loss', 'Minimum Retention', 'Threshold', 'Principal "
+            "Customer Level'). Rule 3 exception: DO NOT normalize this field "
+            "— keep the insurer's exact terminology."
         )
     )
     max_annual_liability: SourcedValue = Field(
         description=(
             "Insurer's maximum liability for the policy period. Normalize "
             "from 'Maximum Liability', 'Maximum Aggregate Liability', 'MAL', "
-            "'Maximum Payable', 'Insurer's Maximum Liability'."
+            "'Maximum Payable', 'Insurer's Maximum Liability', 'Policy "
+            "Maximum Liability'."
         )
     )
     discretionary_limit: SourcedValue = Field(
