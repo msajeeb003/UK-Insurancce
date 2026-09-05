@@ -19,7 +19,13 @@ API key comes from `.env` (OPENAI_API_KEY); model from OPENAI_MODEL.
 import logging
 from functools import lru_cache
 
-from openai import OpenAI
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    AuthenticationError,
+    OpenAI,
+    RateLimitError,
+)
 
 from app.core.config import get_settings
 from app.core.errors import ConfigurationError, UpstreamServiceError
@@ -96,21 +102,38 @@ def extract_quote_fields(tagged_document_text: str) -> QuoteExtraction:
     settings = get_settings()
     client = _get_client()
 
-    response = client.responses.parse(
-        model=settings.openai_model,
-        instructions=SYSTEM_PROMPT,
-        input=[
-            {
-                "role": "user",
-                "content": (
-                    "Extract the structured quote data from the following "
-                    "document text:\n\n" + tagged_document_text
-                ),
-            }
-        ],
-        text_format=QuoteExtraction,  # <- strict Structured Output schema
-        temperature=0,                # deterministic extraction
-    )
+    try:
+        response = client.responses.parse(
+            model=settings.openai_model,
+            instructions=SYSTEM_PROMPT,
+            input=[
+                {
+                    "role": "user",
+                    "content": (
+                        "Extract the structured quote data from the following "
+                        "document text:\n\n" + tagged_document_text
+                    ),
+                }
+            ],
+            text_format=QuoteExtraction,  # <- strict Structured Output schema
+            temperature=0,                # deterministic extraction
+        )
+    except AuthenticationError as exc:
+        raise ConfigurationError(
+            "OpenAI rejected the API key — check OPENAI_API_KEY in .env."
+        ) from exc
+    except RateLimitError as exc:
+        # Covers true rate limits AND exhausted credits (insufficient_quota).
+        logger.error("OpenAI rate/credit limit: %s", exc)
+        raise UpstreamServiceError(
+            "OpenAI refused the request — rate limit reached or no credits "
+            "remaining on the account. Check the billing page."
+        ) from exc
+    except (APITimeoutError, APIConnectionError) as exc:
+        logger.error("OpenAI connection problem: %s", exc)
+        raise UpstreamServiceError(
+            "Could not reach OpenAI (timeout or network error). Try again."
+        ) from exc
 
     if response.output_parsed is None:
         # Happens if the model refused or the output was cut short. Log the
