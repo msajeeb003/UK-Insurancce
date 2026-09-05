@@ -19,10 +19,9 @@ Deliberately ABSENT fields (Rule 4 — set by broker rules, never extracted):
   - Debt collection support
 """
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
-
 
 # ─────────────────────────────────────────────────────────────────────────
 #  LLM-facing structured-output models
@@ -31,14 +30,14 @@ from pydantic import BaseModel, Field
 class SourcedValue(BaseModel):
     """A single extracted value, linked to the page it came from (Rule 2)."""
 
-    value: Optional[str] = Field(
+    value: str | None = Field(
         description=(
             "The value exactly as found in the document (verbatim, including "
             "currency symbols / % signs / units). null if not present in the "
             "document. NEVER invent, infer or use placeholder text."
         )
     )
-    page: Optional[int] = Field(
+    page: int | None = Field(
         description=(
             "1-based PDF page number where this value was found, taken from "
             "the '=== PAGE n ===' markers in the input text. null if the "
@@ -50,25 +49,25 @@ class SourcedValue(BaseModel):
 class BuyerCreditLimit(BaseModel):
     """One row of a buyer / credit-limit schedule, if present in the PDF."""
 
-    buyer_name: Optional[str] = Field(
+    buyer_name: str | None = Field(
         description="Buyer / customer company name as written. null if absent."
     )
-    company_number: Optional[str] = Field(
+    company_number: str | None = Field(
         description=(
             "Company registration number (e.g. UK Companies House number) as "
             "written. null if absent."
         )
     )
-    limit_required: Optional[str] = Field(
+    limit_required: str | None = Field(
         description="Credit limit requested/required, verbatim. null if absent."
     )
-    limit_offered: Optional[str] = Field(
+    limit_offered: str | None = Field(
         description=(
             "Credit limit offered/approved/granted by the insurer, verbatim. "
             "null if absent."
         )
     )
-    page: Optional[int] = Field(
+    page: int | None = Field(
         description="1-based PDF page number this row was found on."
     )
 

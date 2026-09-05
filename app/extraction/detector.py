@@ -13,7 +13,8 @@ from enum import Enum
 
 import pymupdf
 
-from app.config import get_settings
+from app.core.config import get_settings
+from app.core.errors import InvalidDocumentError
 
 logger = logging.getLogger(__name__)
 
@@ -24,17 +25,27 @@ class PdfKind(str, Enum):
 
 
 def open_pdf(pdf_bytes: bytes) -> pymupdf.Document:
-    """Open PDF bytes with PyMuPDF, raising ValueError for corrupt files."""
+    """Open PDF bytes with PyMuPDF, raising InvalidDocumentError on bad input."""
     try:
         doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
     except Exception as exc:  # pymupdf raises generic exceptions on bad input
-        raise ValueError(f"File could not be opened as a PDF: {exc}") from exc
+        logger.info("PDF open failed: %s", exc)
+        raise InvalidDocumentError("File could not be opened as a PDF.") from exc
+
+    settings = get_settings()
     if doc.page_count == 0:
         doc.close()
-        raise ValueError("PDF contains no pages.")
+        raise InvalidDocumentError("PDF contains no pages.")
     if doc.needs_pass:
         doc.close()
-        raise ValueError("PDF is password-protected and cannot be processed.")
+        raise InvalidDocumentError("PDF is password-protected and cannot be processed.")
+    if doc.page_count > settings.max_pdf_pages:
+        pages = doc.page_count
+        doc.close()
+        raise InvalidDocumentError(
+            f"PDF has {pages} pages — the limit is {settings.max_pdf_pages}. "
+            "Insurer quotes are short documents; please upload the quote only."
+        )
     return doc
 
 

@@ -126,9 +126,18 @@ function mergeBuyers(p, colId, buyers) {
   }
 }
 
+const MAX_QUOTES = 6;
+
 async function uploadFiles(kind, fileList) {
   const p = proj(); if (!p) return;
-  const files = Array.from(fileList);
+  let files = Array.from(fileList);
+  if (kind === 'quote') {
+    const room = MAX_QUOTES - p.files.filter(f => f.kind === 'quote').length;
+    if (files.length > room) {
+      alert(`Up to ${MAX_QUOTES} quotes per project — ${Math.max(room, 0)} more can be added.`);
+      files = files.slice(0, Math.max(room, 0));
+    }
+  }
   for (const f of files) {
     const entry = {
       id: uid(), name: f.name, kind,

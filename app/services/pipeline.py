@@ -10,13 +10,14 @@ import asyncio
 import logging
 from typing import Literal
 
-from app.config import get_settings
+from app.core.config import get_settings
+from app.core.errors import InvalidDocumentError
 from app.extraction.azure_extractor import extract_pages_azure
 from app.extraction.base import PageText, to_tagged_document
 from app.extraction.detector import PdfKind, classify_pdf, open_pdf
 from app.extraction.pymupdf_extractor import extract_pages_pymupdf
 from app.llm.openai_extractor import extract_quote_fields
-from app.schemas import ExtractionResponse, ProcessingMeta, QuoteExtraction
+from app.models.schemas import ExtractionResponse, ProcessingMeta, QuoteExtraction
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,6 @@ def _sanitize_pages(extraction: QuoteExtraction, page_count: int) -> QuoteExtrac
     """
     Defensive pass over the LLM output:
     - a cited page outside the document's range is nulled (value kept);
-    - a non-null value with no page keeps value but page stays null;
     - a null value must not carry a page.
     Structured Outputs makes schema violations impossible, but page-number
     hallucination is still semantically possible — this keeps source links
@@ -64,11 +64,13 @@ async def run_extraction_pipeline(
       - "auto"    detect digital vs scanned (default)
       - "digital" force PyMuPDF
       - "azure"   force Azure DI (e.g. digital PDFs with brutal tables)
+
+    Raises `PipelineError` subclasses; the API layer maps them to HTTP.
     """
     settings = get_settings()
 
     # ── 1. Open + route ──────────────────────────────────────────────────
-    doc = open_pdf(pdf_bytes)  # raises ValueError on bad/encrypted PDFs
+    doc = open_pdf(pdf_bytes)  # raises InvalidDocumentError on bad input
     try:
         page_count = doc.page_count
 
@@ -90,12 +92,12 @@ async def run_extraction_pipeline(
     finally:
         doc.close()
 
-    tagged_text = to_tagged_document(pages)
-    if not tagged_text.replace("=== PAGE", "").strip("= \n0123456789"):
-        raise ValueError(
-            "No text could be extracted from this PDF with the "
+    if not any(page.text.strip() for page in pages):
+        raise InvalidDocumentError(
+            f"No text could be extracted from this PDF with the "
             f"'{engine_used}' engine."
         )
+    tagged_text = to_tagged_document(pages)
 
     # ── 3. LLM structured extraction (blocking SDK call -> thread) ───────
     extraction = await asyncio.to_thread(extract_quote_fields, tagged_text)

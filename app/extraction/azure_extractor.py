@@ -19,27 +19,30 @@ pulling buyer credit-limit schedules.
 
 import logging
 from collections import defaultdict
+from functools import lru_cache
 
 from azure.ai.documentintelligence import DocumentIntelligenceClient
 from azure.core.credentials import AzureKeyCredential
 
-from app.config import get_settings
+from app.core.config import get_settings
+from app.core.errors import ConfigurationError
 from app.extraction.base import PageText
 
 logger = logging.getLogger(__name__)
 
 
+@lru_cache
 def _get_client() -> DocumentIntelligenceClient:
+    """One client per process — the SDK's connection pool is reused."""
     settings = get_settings()
-    if not settings.azure_endpoint or not settings.azure_key:
-        raise RuntimeError(
-            "Azure Document Intelligence is not configured. "
-            "Set AZURE_ENDPOINT and AZURE_KEY in .env — required for "
-            "scanned PDFs."
+    if not settings.azure_endpoint or not settings.azure_key.get_secret_value():
+        raise ConfigurationError(
+            "Azure Document Intelligence is not configured — scanned PDFs "
+            "cannot be processed. Set AZURE_ENDPOINT and AZURE_KEY."
         )
     return DocumentIntelligenceClient(
         endpoint=settings.azure_endpoint,
-        credential=AzureKeyCredential(settings.azure_key),
+        credential=AzureKeyCredential(settings.azure_key.get_secret_value()),
     )
 
 

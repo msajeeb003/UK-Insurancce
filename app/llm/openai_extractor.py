@@ -17,11 +17,13 @@ API key comes from `.env` (OPENAI_API_KEY); model from OPENAI_MODEL.
 """
 
 import logging
+from functools import lru_cache
 
 from openai import OpenAI
 
-from app.config import get_settings
-from app.schemas import QuoteExtraction
+from app.core.config import get_settings
+from app.core.errors import ConfigurationError, UpstreamServiceError
+from app.models.schemas import QuoteExtraction
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +73,19 @@ Extract the requested fields following these STRICT rules:
 """
 
 
+@lru_cache
+def _get_client() -> OpenAI:
+    """One client per process — reuses the HTTP connection pool."""
+    settings = get_settings()
+    if not settings.openai_api_key.get_secret_value():
+        raise ConfigurationError("OPENAI_API_KEY is not configured — set it in .env.")
+    return OpenAI(
+        api_key=settings.openai_api_key.get_secret_value(),
+        timeout=settings.openai_timeout_seconds,
+        max_retries=settings.openai_max_retries,
+    )
+
+
 def extract_quote_fields(tagged_document_text: str) -> QuoteExtraction:
     """
     Send page-tagged document text to OpenAI and get back a validated
@@ -79,10 +94,7 @@ def extract_quote_fields(tagged_document_text: str) -> QuoteExtraction:
     Blocking call — the pipeline runs it in a worker thread.
     """
     settings = get_settings()
-    if not settings.openai_api_key:
-        raise RuntimeError("OPENAI_API_KEY is not configured — set it in .env.")
-
-    client = OpenAI(api_key=settings.openai_api_key)
+    client = _get_client()
 
     response = client.responses.parse(
         model=settings.openai_model,
@@ -101,10 +113,15 @@ def extract_quote_fields(tagged_document_text: str) -> QuoteExtraction:
     )
 
     if response.output_parsed is None:
-        # Happens if the model refused or output was incomplete.
-        raise RuntimeError(
-            "OpenAI returned no parsed output "
-            f"(status={response.status!r}). Raw text: {response.output_text[:500]!r}"
+        # Happens if the model refused or the output was cut short. Log the
+        # raw payload for diagnosis but never return it to the client.
+        logger.error(
+            "OpenAI returned no parsed output (status=%r). Raw text: %r",
+            response.status, response.output_text[:500],
+        )
+        raise UpstreamServiceError(
+            "The AI model returned no usable extraction for this document. "
+            "Try again, or check the server logs for details."
         )
 
     logger.info("OpenAI extraction complete (model=%s)", settings.openai_model)
