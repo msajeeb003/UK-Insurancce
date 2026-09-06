@@ -3,7 +3,7 @@ HTTP endpoints.
 
 Error contract: the pipeline raises `PipelineError` subclasses whose
 messages are client-safe and whose `status_code` maps directly onto the
-HTTP response. Unexpected exceptions become an opaque 500 — details go to
+HTTP response. Unexpected exceptions become an opaque 502 — details go to
 the server log only, never to the client.
 """
 
@@ -15,13 +15,19 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from app.core.config import get_settings
 from app.core.errors import PipelineError
 from app.models.schemas import ExtractionResponse
-from app.services.pipeline import EngineOverride, run_extraction_pipeline
+from app.services.library import get_insurers
+from app.services.pipeline import EngineOverride, FileKind, run_extraction_pipeline
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 _READ_CHUNK = 1024 * 1024  # 1 MB
+
+EXCEL_CONTENT_TYPES = {
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel.sheet.macroEnabled.12",
+}
 
 
 @router.get("/health")
@@ -35,6 +41,40 @@ async def health() -> dict:
             settings.azure_endpoint and settings.azure_key.get_secret_value()
         ),
     }
+
+
+@router.get("/insurers")
+async def insurers() -> dict:
+    """
+    The standing insurer list with the debt-collection rule (BRD 2.4).
+    Served from config/insurers.json — configuration, not code, so edits
+    take effect without a release.
+    """
+    return {"insurers": get_insurers()}
+
+
+def _resolve_file_kind(filename: str, content_type: str | None) -> FileKind:
+    """Route by extension/content type; raise 415 for anything unsupported."""
+    lowered = filename.lower()
+    if lowered.endswith(".pdf") or content_type == "application/pdf":
+        return "pdf"
+    if lowered.endswith((".xlsx", ".xlsm")) or content_type in EXCEL_CONTENT_TYPES:
+        return "excel"
+    if lowered.endswith(".xls"):
+        raise HTTPException(
+            status_code=415,
+            detail=(
+                "Legacy .xls workbooks are not supported — re-save the "
+                "schedule as .xlsx and upload again."
+            ),
+        )
+    raise HTTPException(
+        status_code=415,
+        detail=(
+            "Only PDF and Excel (.xlsx) files are accepted (got "
+            f"{content_type or 'unknown content type'})."
+        ),
+    )
 
 
 async def _read_capped(file: UploadFile, max_bytes: int) -> bytes:
@@ -56,15 +96,15 @@ async def _read_capped(file: UploadFile, max_bytes: int) -> bytes:
 async def extract_quote(
     file: Annotated[
         UploadFile,
-        File(description="Insurer quote or credit limit schedule (PDF)"),
+        File(description="Insurer quote, credit-limit schedule or policy document (PDF/xlsx)"),
     ],
     engine: Annotated[
         EngineOverride,
         Query(
             description=(
-                "Extraction engine: 'auto' detects digital vs scanned, "
+                "PDF extraction engine: 'auto' detects digital vs scanned, "
                 "'digital' forces PyMuPDF, 'azure' forces Azure Document "
-                "Intelligence OCR."
+                "Intelligence OCR. Ignored for Excel uploads."
             ),
         ),
     ] = "auto",
@@ -73,20 +113,15 @@ async def extract_quote(
 
     # ── Upload validation ────────────────────────────────────────────────
     filename = file.filename or "upload.pdf"
-    if not filename.lower().endswith(".pdf") and file.content_type != "application/pdf":
-        raise HTTPException(
-            status_code=415,
-            detail="Only PDF files are accepted (got "
-                   f"{file.content_type or 'unknown content type'}).",
-        )
+    file_kind = _resolve_file_kind(filename, file.content_type)
 
-    pdf_bytes = await _read_capped(file, settings.max_upload_mb * 1024 * 1024)
-    if not pdf_bytes:
+    file_bytes = await _read_capped(file, settings.max_upload_mb * 1024 * 1024)
+    if not file_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
     # ── Pipeline ─────────────────────────────────────────────────────────
     try:
-        return await run_extraction_pipeline(pdf_bytes, filename, engine)
+        return await run_extraction_pipeline(file_bytes, filename, engine, file_kind)
     except PipelineError as exc:
         # Message is client-safe by contract; anything sensitive was logged
         # where the error was raised.

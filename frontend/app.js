@@ -4,9 +4,11 @@
 
 'use strict';
 
-/* ── Standing insurer list (Setup screen; DEBT INCL drives the
-      "Debt collection support" rule row on Review) ─────────────────── */
-const INSURERS = [
+/* ── Standing insurer list (Setup screen; DEBT INCL badge mirrors the
+      BRD 2.4 rule). Served from the backend's config/insurers.json so the
+      list is configuration, not code — this constant is only the fallback
+      until /insurers responds. ─────────────────────────────────────── */
+let INSURERS = [
   { id: 'allianz',  name: 'Allianz Trade',    debtIncl: true  },
   { id: 'atradius', name: 'Atradius',         debtIncl: true  },
   { id: 'coface',   name: 'Coface',           debtIncl: true  },
@@ -18,6 +20,20 @@ const INSURERS = [
   { id: 'nexus',    name: 'Nexus',            debtIncl: false },
   { id: 'aviva',    name: 'Aviva',            debtIncl: false },
 ];
+
+async function loadInsurerConfig() {
+  try {
+    const res = await fetch('/insurers');
+    if (!res.ok) return;
+    const list = (await res.json()).insurers;
+    if (Array.isArray(list) && list.length) {
+      INSURERS = list.map(i => ({
+        id: i.id, name: i.name, debtIncl: i.debt_collection === 'included',
+      }));
+      render();
+    }
+  } catch (e) { /* fallback constant stays in effect */ }
+}
 
 /* ── Review grid rows. `key` matches the backend JSON where extracted;
       set:true rows are broker/rule-set (never extracted). ───────────── */
@@ -36,9 +52,6 @@ const FIELDS = [
   { key: 'discretionary_limit', label: 'Discretionary limit' },
   { key: 'max_terms_of_payment', label: 'Max terms of payment' },
   { key: 'max_extension_period', label: 'Max extension period' },
-  { key: 'countries_covered', label: 'Countries covered' },
-  { key: 'exclusions', label: 'Exclusions' },
-  { key: 'special_conditions', label: 'Special conditions' },
   { key: 'additional_info', label: 'Additional info', note: 'Free-format' },
 ];
 const CONFIRM_KEYS = ['premium', 'indemnity', 'excess', 'maxLiability'];
@@ -107,10 +120,12 @@ function touch(p) { p.updated = todayLabel(); save(); }
 
 /* ── Backend wiring ────────────────────────────────────────────────── */
 function debtRuleFor(insurerName) {
-  if (!insurerName) return 'Not included';
+  // Fallback only — the server's set_fields normally supplies this.
+  // BRD 2.4: unmatched insurers default to Outsourced.
+  if (!insurerName) return 'Outsourced';
   const hit = INSURERS.find(i => insurerName.toLowerCase().includes(i.name.toLowerCase())
     || i.name.toLowerCase().includes(insurerName.toLowerCase()));
-  return hit && hit.debtIncl ? 'Included' : 'Not included';
+  return hit && hit.debtIncl ? 'Included' : 'Outsourced';
 }
 
 function mergeBuyers(p, colId, buyers) {
@@ -188,8 +203,6 @@ function buildDemoColumns() {
       excess: sv('£1,000', 5), excess_type: sv('Minimum Retention', 5),
       max_annual_liability: sv('£2,000,000', 6), discretionary_limit: sv('£25,000', 6),
       max_terms_of_payment: sv('90 days', 7), max_extension_period: sv('60 days', 7),
-      countries_covered: sv('UK & Ireland', 7), exclusions: sv('Sales to associated companies excluded', 8),
-      special_conditions: sv('Monthly turnover declarations required', 8),
       additional_info: sv('No-claims bonus 10%', 8),
     }),
     mk('demo-b', 'Insurer B', 'Included', {
@@ -199,9 +212,7 @@ function buildDemoColumns() {
       excess: sv('£2,500', 4), excess_type: sv('Deductible', 4),
       max_annual_liability: sv('£1,500,000', 4), discretionary_limit: sv('£20,000', 5, 'uncertain'),
       max_terms_of_payment: sv('60 days', 5), max_extension_period: sv('30 days', 5),
-      countries_covered: sv('UK, Ireland, Germany, France', 5),
-      exclusions: sv('Government buyers excluded', 6, 'uncertain'),
-      special_conditions: sv(null, null, null), additional_info: sv(null, null, null),
+      additional_info: sv(null, null, null),
     }),
     mk('demo-c', 'Insurer C', 'Outsourced', {
       annual_turnover: sv('£4,500,000', 2), premium_rate: sv('0.35%', 3),
@@ -210,9 +221,7 @@ function buildDemoColumns() {
       excess: sv('£1,000', 6), excess_type: sv('First Loss', 6),
       max_annual_liability: sv('£2,500,000', 7), discretionary_limit: sv(null, null, null),
       max_terms_of_payment: sv('120 days', 8), max_extension_period: sv('60 days', 8),
-      countries_covered: sv('Whole World excluding sanctioned countries', 8),
-      exclusions: sv(null, null, null), special_conditions: sv('Quote subject to satisfactory proposal form', 9),
-      additional_info: sv('New buyer cover to £50k', 9),
+      additional_info: sv('New buyer cover to £50k. Quote subject to satisfactory proposal form.', 9),
     }),
     { id: 'demo-m1', name: 'Insurer A — Option 2', manual: true, debt: '', data: {} },
   ];
@@ -233,7 +242,7 @@ function loadDemoData(p) {
     { id: 'demo-f1', name: 'Insurer-A_quote_2026.pdf', kind: 'quote', ext: 'PDF',
       status: 'extracted', meta: 'Insurer A · quote · 8 pages · demo data', colId: 'demo-a' },
     { id: 'demo-f2', name: 'Insurer-B_quote.pdf', kind: 'quote', ext: 'PDF',
-      status: 'extracted', meta: 'Insurer B · quote (scanned) · 6 pages · 2 values to verify · demo data', colId: 'demo-b' },
+      status: 'extracted', meta: 'Insurer B · quote (scanned) · 6 pages · 1 value to verify · demo data', colId: 'demo-b' },
     { id: 'demo-f3', name: 'Insurer-C_quote.pdf', kind: 'quote', ext: 'PDF',
       status: 'extracted', meta: 'Insurer C · quote · 9 pages · demo data', colId: 'demo-c' },
     { id: 'demo-f4', name: 'credit-limits_schedule.pdf', kind: 'limits', ext: 'PDF',
@@ -268,12 +277,16 @@ function applyExtraction(p, entry, body, kind) {
     return;
   }
 
+  // BRD 2.4: debt collection support is set by the server-side insurer
+  // rule (config/insurers.json), never extracted; editable per column.
+  const ruleDebt = body.set_fields && body.set_fields.debt_collection_support
+    ? body.set_fields.debt_collection_support.value : debtRuleFor(insurer);
   const col = {
     id: uid(),
     name: kind === 'expiring' ? 'Expiring — ' + (insurer || 'policy') : (insurer || entry.name.replace(/\.pdf$/i, '')),
     manual: false, expiring: kind === 'expiring',
     fileName: entry.name, data: {},
-    debt: debtRuleFor(insurer),
+    debt: ruleDebt,
   };
   for (const f of FIELDS) {
     if (f.set) continue;
@@ -1073,3 +1086,4 @@ document.addEventListener('keydown', e => {
 /* ── Boot ──────────────────────────────────────────────────────────── */
 load();
 render();
+loadInsurerConfig();  // standing list + debt rule from config, not code

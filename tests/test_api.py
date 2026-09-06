@@ -20,6 +20,18 @@ def test_health(client):
     assert set(body) == {"status", "openai_configured", "azure_configured"}
 
 
+def test_insurers_endpoint_serves_configuration(client):
+    res = client.get("/insurers")
+    assert res.status_code == 200
+    insurers = res.json()["insurers"]
+    by_name = {i["name"]: i["debt_collection"] for i in insurers}
+    # BRD 2.4 rule as configuration.
+    assert by_name["Allianz Trade"] == "included"
+    assert by_name["Atradius"] == "included"
+    assert by_name["Coface"] == "included"
+    assert by_name["QBE"] == "outsourced"
+
+
 def test_security_headers(client):
     res = client.get("/health")
     assert res.headers["X-Content-Type-Options"] == "nosniff"
@@ -32,11 +44,20 @@ def test_frontend_served(client):
     assert "Quote Comparison Tool" in res.text
 
 
-def test_rejects_non_pdf(client):
+def test_rejects_unsupported_type(client):
     res = client.post(
         "/extract-quote", files={"file": ("notes.txt", b"hello", "text/plain")}
     )
     assert res.status_code == 415
+
+
+def test_legacy_xls_rejected_with_guidance(client):
+    res = client.post(
+        "/extract-quote",
+        files={"file": ("limits.xls", b"\xd0\xcf\x11\xe0", "application/vnd.ms-excel")},
+    )
+    assert res.status_code == 415
+    assert ".xlsx" in res.json()["detail"]
 
 
 def test_rejects_empty_file(client):
@@ -88,14 +109,45 @@ def test_happy_path_with_stubbed_llm(client, digital_pdf, sample_extraction, mon
     assert body["data"]["indemnity"] == {
         "value": "90%", "page": None, "confidence": "high",
     }
-    # New comparison fields are present.
-    assert body["data"]["countries_covered"]["value"] == "United Kingdom, Ireland, Germany"
-    # The review summary flags what a broker must check.
-    assert "special_conditions" in body["review"]["missing_fields"]
-    assert set(body["review"]["uncertain_fields"]) == {"discretionary_limit", "exclusions"}
-    # Ignored fields must not exist in the response at all.
+    # The review summary flags what a broker must check (BRD 2.5).
+    assert "minimum_annual_premium" in body["review"]["missing_fields"]
+    assert body["review"]["uncertain_fields"] == ["discretionary_limit"]
+    assert body["review"]["confirm_required"] == [
+        "estimated_annual_premium_exc_ipt", "indemnity", "excess",
+        "max_annual_liability",
+    ]
+    # BRD 2.4: debt collection is rule-set, never extracted; unknown insurer
+    # defaults to Outsourced.
+    assert body["set_fields"]["debt_collection_support"] == {
+        "value": "Outsourced", "source": "insurer_rule", "matched_insurer": None,
+    }
+    # Set fields must not exist inside the extraction itself.
     assert "type_of_policy" not in body["data"]
     assert "debt_collection_support" not in body["data"]
+
+
+def test_excel_schedule_accepted(client, limits_xlsx, sample_extraction, monkeypatch):
+    sample_extraction.document_type = "credit_limit_schedule"
+    sample_extraction.insurer.value = "Atradius"
+    monkeypatch.setattr(
+        pipeline_mod, "extract_quote_fields", lambda text: sample_extraction
+    )
+    res = client.post(
+        "/extract-quote",
+        files={"file": (
+            "limits.xlsx", limits_xlsx,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["meta"]["extraction_engine"] == "excel"
+    assert body["meta"]["page_count"] == 1  # one worksheet
+    assert body["data"]["document_type"] == "credit_limit_schedule"
+    # Atradius is on the standing list -> rule says Included.
+    assert body["set_fields"]["debt_collection_support"] == {
+        "value": "Included", "source": "insurer_rule", "matched_insurer": "Atradius",
+    }
 
 
 def test_unexpected_error_is_opaque_502(client, digital_pdf, monkeypatch):

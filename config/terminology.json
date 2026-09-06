@@ -1,0 +1,79 @@
+{
+  "_comment": [
+    "Terminology mapping library (BRD 2.3): what insurers call each row of",
+    "the brokerage's comparison presentation. The client is compiling the",
+    "full line-by-line document; extend these lists as it arrives — this",
+    "file is CONFIGURATION and the server re-reads it when it changes.",
+    "Keys are the extraction schema field names; values are insurer",
+    "wordings that map onto that row. Sources so far: brokerage slide,",
+    "Nexus terminology sheet, QBE quotation, Atradius limit summary.",
+    "excess_type is the exception (BRD 2.3): the row label is normalized",
+    "but the VALUE keeps the insurer's own wording — its list below is",
+    "examples of wordings to recognise, never to replace."
+  ],
+  "fields": {
+    "annual_turnover": [
+      "Insurable Turnover", "Estimated Insurable Turnover",
+      "Estimated Insurable Turnover (Split Domestic and Export)",
+      "Estimated Annual Sales", "Declared Turnover", "Total Estimated Turnover"
+    ],
+    "premium_rate": [
+      "Rate", "Premium Rate", "Rate per £100", "Turnover Rate"
+    ],
+    "estimated_annual_premium_exc_ipt": [
+      "Annual Premium", "Estimated Premium", "Total Estimated Premium",
+      "Premium Payable", "Deposit Premium"
+    ],
+    "minimum_annual_premium": [
+      "Minimum Premium", "MAP", "Minimum and Deposit Premium",
+      "Minimum Premium Amount"
+    ],
+    "credit_limit_charges": [
+      "Credit Limit Fee", "Buyer Underwriting Charges", "Limit Assessment Fee",
+      "Credit Opinion Charges", "Limit Management Charge",
+      "Annual Administration Charge"
+    ],
+    "indemnity": [
+      "Indemnity", "Insured Percentage", "Cover Level", "% of Cover",
+      "Agreed Percentage"
+    ],
+    "excess": [
+      "Deductible", "Minimum Retention", "Excess", "Uninsured Amount",
+      "Each and Every Loss Deductible", "Aggregate First Loss"
+    ],
+    "excess_type": [
+      "Each and Every Loss", "Aggregate First Loss", "Non Qualifying Loss",
+      "Minimum Retention", "Threshold", "Principal Customer Level", "Deductible",
+      "First Loss"
+    ],
+    "max_annual_liability": [
+      "Maximum Liability", "Maximum Aggregate Liability", "MAL",
+      "Maximum Payable", "Insurer's Maximum Liability", "Policy Maximum Liability"
+    ],
+    "discretionary_limit": [
+      "Discretionary Limit", "DL", "Discretionary Credit Limit",
+      "Self-Underwriting Limit"
+    ],
+    "max_terms_of_payment": [
+      "Maximum Terms of Payment", "MTP", "Maximum Credit Terms",
+      "Terms of Payment"
+    ],
+    "max_extension_period": [
+      "Maximum Extension Period", "MEP", "Grace Period"
+    ],
+    "buyer_name": [
+      "Buyer Name", "Customer", "Buyer", "Insured Buyer"
+    ],
+    "company_number": [
+      "Company registration number", "Company No.", "Companies House Number",
+      "Registration Number"
+    ],
+    "limit_required": [
+      "Application Amount", "Limit Requested", "Limit Required", "Amount Applied For"
+    ],
+    "limit_offered": [
+      "Amount Agreed", "Limit Approved", "Limit Granted", "Limit Offered",
+      "Credit Limit Decision"
+    ]
+  }
+}

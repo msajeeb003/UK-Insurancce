@@ -29,6 +29,9 @@ client presentation.
 │   │   ├── azure_extractor.py     Scanned PDFs (OCR + table grids)
 │   │   └── base.py         Shared PageText type + page markers
 │   └── llm/openai_extractor.py    OpenAI Responses API call
+├── config/                 CONFIGURATION, not code (BRD 2.4) — edits need no release
+│   ├── insurers.json       Standing insurer list, aliases, debt-collection rule
+│   └── terminology.json    Mapping library: insurer wordings per comparison row
 ├── frontend/               Vanilla SPA (index.html, app.js, styles.css)
 ├── tests/                  Pytest suite — no network, no API keys needed
 ├── docs/ARCHITECTURE.md    Pipeline diagram, design decisions, trust boundaries
@@ -66,7 +69,13 @@ detects digital vs scanned). Response (abridged):
             "extraction_engine": "pymupdf", "llm_model": "gpt-4o-2024-08-06" },
   "review": {
     "missing_fields": ["minimum_annual_premium"],
-    "uncertain_fields": ["discretionary_limit"]
+    "uncertain_fields": ["discretionary_limit"],
+    "confirm_required": ["estimated_annual_premium_exc_ipt", "indemnity",
+                         "excess", "max_annual_liability"]
+  },
+  "set_fields": {
+    "debt_collection_support": { "value": "Included", "source": "insurer_rule",
+                                 "matched_insurer": "Atradius" }
   },
   "data": {
     "document_type": "insurer_quote",
@@ -75,7 +84,6 @@ detects digital vs scanned). Response (abridged):
     "excess_type": { "value": "Each and Every Loss", "page": 2, "confidence": "high" },
     "discretionary_limit": { "value": "£20,000", "page": 3, "confidence": "uncertain" },
     "minimum_annual_premium": { "value": null, "page": null, "confidence": null },
-    "countries_covered": { "value": "UK, Ireland, Germany", "page": 2, "confidence": "high" },
     "buyer_credit_limits": [
       { "buyer_name": "Example Ltd", "company_number": "01234567",
         "limit_required": "£250,000", "limit_offered": "£200,000", "page": 3 }
@@ -84,22 +92,30 @@ detects digital vs scanned). Response (abridged):
 }
 ```
 
-The 18 extracted fields: document type, insurer, turnover, premium rate,
-est. annual premium (exc IPT), minimum premium, credit-limit charges,
-indemnity, excess, excess type, max annual liability, discretionary limit,
-payment terms, extension period, countries covered, exclusions, special
-conditions, additional info — plus the buyer credit-limit array.
+The BRD 2.3 comparison list is definitive — 16 rows: insurer, type of policy
+(broker-set), annual turnover, premium rate, est. annual premium (exc IPT),
+minimum premium, credit-limit charges, debt collection support (rule-set),
+indemnity, excess, excess type (insurer's own wording), max annual
+liability, discretionary limit, max terms of payment, max extension period,
+additional info. The two set fields never appear inside `data` — debt
+collection arrives in `set_fields` from the insurer rule; type of policy is
+chosen at project setup in the UI. Excel (`.xlsx`) credit-limit schedules
+are accepted alongside PDFs; each worksheet counts as one source page.
 
 ## Extraction rules
 
 1. **No guessing** — absent fields return `{"value": null, "page": null}`.
 2. **Source linking** — every value carries its 1-based PDF page; out-of-range
    citations are stripped by a post-validation pass.
-3. **Normalization** — insurer synonyms (Deductible / Minimum Retention /
-   Excess, MAL, MTP/MEP, DL…) map onto standard fields, **except**
+3. **Normalization via the mapping library** — insurer wordings map onto the
+   brokerage's row labels using [config/terminology.json](config/terminology.json)
+   (the client-compiled library; extend it without a release), **except**
    `excess_type`, which keeps the insurer's original wording.
-4. **Ignored fields** — "Type of policy" and "Debt collection support" are set
-   by broker rules and are absent from the extraction schema entirely.
+4. **Set fields, never extracted** — "Type of policy" is broker-selected at
+   setup; "Debt collection support" is set by the insurer rule in
+   [config/insurers.json](config/insurers.json) (Allianz/Atradius/Coface →
+   Included, everyone else → Outsourced) and returned in `set_fields`. Both
+   are absent from the extraction schema entirely and editable per column.
 5. **Review flags** — every value carries a `confidence` (`high`/`uncertain`);
    the `review` block lists missing and uncertain fields (computed
    server-side, never by the LLM) so the UI can highlight what a broker must

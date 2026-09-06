@@ -1,6 +1,9 @@
 """Shared fixtures for the test suite. No network calls, no API keys —
 the OpenAI step is monkeypatched so tests exercise everything around it."""
 
+import io
+
+import openpyxl
 import pymupdf
 import pytest
 
@@ -17,6 +20,19 @@ def make_pdf(pages: list[list[str]]) -> bytes:
     data = doc.tobytes()
     doc.close()
     return data
+
+
+def make_xlsx(sheets: dict[str, list[list]]) -> bytes:
+    """Build an .xlsx workbook: sheet title -> rows of cell values."""
+    workbook = openpyxl.Workbook()
+    workbook.remove(workbook.active)
+    for title, rows in sheets.items():
+        sheet = workbook.create_sheet(title)
+        for row in rows:
+            sheet.append(row)
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
 
 
 DIGITAL_PAGE = [
@@ -40,6 +56,18 @@ def digital_pdf() -> bytes:
 def sparse_pdf() -> bytes:
     """Two nearly-empty pages — classifies as SCANNED."""
     return make_pdf([["Page 1"], ["Page 2"]])
+
+
+@pytest.fixture
+def limits_xlsx() -> bytes:
+    """A small buyer credit-limit schedule as Excel."""
+    return make_xlsx({
+        "Limits": [
+            ["Buyer Name", "Company registration number", "Application Amount", "Amount Agreed"],
+            ["Example Ltd", "01234567", 250000, 200000],
+            ["Sample Trading", "07654321", 80000, 80000],
+        ],
+    })
 
 
 def sv(value, page, confidence="high") -> SourcedValue:
@@ -67,9 +95,6 @@ def sample_extraction() -> QuoteExtraction:
         discretionary_limit=sv("GBP 20,000", 2, confidence="uncertain"),
         max_terms_of_payment=sv(None, None),
         max_extension_period=sv(None, None),
-        countries_covered=sv("United Kingdom, Ireland, Germany", 2),
-        exclusions=sv("Sales to government entities excluded", 2, confidence="uncertain"),
-        special_conditions=sv(None, None),
         additional_info=sv(None, None),
         buyer_credit_limits=[BuyerCreditLimit(
             buyer_name="Example Ltd", company_number="01234567",

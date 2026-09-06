@@ -1,11 +1,17 @@
 # Architecture
 
+Aligned to BRD v1.2 (Upload → Extraction → Review → Compare → Export).
+
 ## Extraction pipeline
 
 ```
-POST /extract-quote (PDF upload, ≤25 MB, ≤60 pages)
+POST /extract-quote (PDF or .xlsx upload, ≤25 MB, ≤60 pages)
         │
-        ▼
+        ├─ .xlsx ──► app/extraction/excel_extractor.py
+        │            credit-limit schedules: one worksheet = one "page",
+        │            rows rendered as explicit pipe-separated grids
+        │
+        ▼ (.pdf)
  app/extraction/detector.py
    PyMuPDF text-layer probe: count extractable chars per page.
    ≥40% low-text pages → SCANNED, else DIGITAL (both tunable via .env)
@@ -25,24 +31,45 @@ POST /extract-quote (PDF upload, ≤25 MB, ≤60 pages)
         ▼
  app/llm/openai_extractor.py
    OpenAI Responses API, temperature 0, strict Structured Outputs
-   compiled from the Pydantic model in app/models/schemas.py
+   compiled from the Pydantic model in app/models/schemas.py.
+   The prompt's terminology section is BUILT AT REQUEST TIME from the
+   mapping library (config/terminology.json, BRD 2.3) and the standing
+   insurer list (config/insurers.json)
         │
         ▼
- app/services/pipeline.py :: _sanitize + _build_review
+ app/services/pipeline.py :: _sanitize + _build_review + _build_set_fields
    hallucinated / out-of-range page citations cleared (values kept),
-   confidence flags made consistent, then missing/uncertain fields
-   summarized deterministically — never by the LLM
+   confidence flags made consistent, missing/uncertain fields summarized
+   deterministically, and debt collection support SET by the insurer
+   rule (BRD 2.4) — none of this is asked of the LLM
         │
         ▼
- ExtractionResponse JSON (meta + review + data)
+ ExtractionResponse JSON (meta + review + set_fields + data)
 ```
+
+## Configuration, not code (BRD 2.4)
+
+`config/insurers.json` (standing list, aliases, debt-collection rule) and
+`config/terminology.json` (the client-compiled mapping library) are re-read
+whenever the file changes on disk — adding an insurer, moving one between
+Included and Outsourced, or extending the terminology never requires a
+release or even a restart. `GET /insurers` serves the list to the frontend.
 
 ## Design decisions
 
-- **Never guess** — every scalar is `{value, page, confidence}`; a missing
-  value is `{null, null, null}`. The schema makes placeholders
+- **Never guess** (BRD 2.2) — every scalar is `{value, page, confidence}`; a
+  missing value is `{null, null, null}`. "N/A" and "Fixed" are broker
+  entries, never extraction output. The schema makes placeholders
   indistinguishable from data, so the prompt forbids them and nullable types
   enforce it.
+- **Set beats guessed** (BRD 2.4) — type of policy (broker, at setup) and
+  debt collection support (insurer rule) are structurally absent from the
+  LLM schema; the model cannot return them. The rule result travels in
+  `set_fields`, clearly separated from extracted data, and stays editable.
+- **The 16-field list is definitive** (BRD 2.3) — countries covered,
+  exclusions and special conditions are not comparison rows; material notes
+  of that kind flow into `additional_info` (per the BRD open item) until
+  the client confirms otherwise.
 - **Uncertainty is surfaced, not hidden** — the LLM marks shaky values
   `confidence: "uncertain"`; the server then computes the `review` block
   (missing + uncertain field lists) deterministically, and the UI shows an

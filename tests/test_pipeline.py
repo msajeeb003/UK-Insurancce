@@ -49,7 +49,12 @@ def test_review_summary_lists_missing_and_uncertain(sample_extraction):
     review = _build_review(out)
 
     assert "estimated_annual_premium_exc_ipt" in review.missing_fields
-    assert "special_conditions" in review.missing_fields
+    assert "minimum_annual_premium" in review.missing_fields
     assert "insurer" not in review.missing_fields
 
-    assert set(review.uncertain_fields) == {"discretionary_limit", "exclusions"}
+    assert review.uncertain_fields == ["discretionary_limit"]
+    # BRD 2.5 confirmation gate travels with every response.
+    assert review.confirm_required == [
+        "estimated_annual_premium_exc_ipt", "indemnity", "excess",
+        "max_annual_liability",
+    ]

@@ -1,24 +1,34 @@
 """
-Pydantic models.
+Pydantic models — aligned to BRD v1.2.
 
-Two groups:
+Three groups:
 
 1. LLM-facing models (`QuoteExtraction` + children) — passed to the OpenAI
    Responses API as the Structured Output schema. Strict mode is enforced by
    the SDK, so the model can ONLY return this exact shape. Every scalar field
    is a `SourcedValue`: the raw value as written in the document, the PDF
-   page number it was found on, and a confidence flag. A missing value is
-   `value=null, page=null, confidence=null` — the schema itself makes
-   "guess a placeholder" impossible to distinguish from real data, so the
-   prompt + nullable types together enforce Rule 1.
+   page (or Excel sheet) it was found on, and a confidence flag. A missing
+   value is `value=null, page=null, confidence=null` (BRD 2.2: blank, never
+   guessed, never placeholder text).
 
-2. API-facing models (`ExtractionResponse`) — what `/extract-quote` returns:
-   processing metadata, a review summary (missing / uncertain fields,
-   computed server-side, never by the LLM), and the extraction itself.
+   Insurer wording synonyms are NOT hardcoded here — they come from the
+   terminology mapping library (config/terminology.json, BRD 2.3) and are
+   injected into the extraction prompt at request time.
 
-Deliberately ABSENT fields (Rule 4 — set by broker rules, never extracted):
-  - Type of policy
-  - Debt collection support
+2. Rule-set fields (`SetFields`) — BRD 2.4: debt collection support is set
+   by the insurer rule in config/insurers.json, never extracted. Type of
+   policy is the other set field; it is broker-selected at project level in
+   the UI, so it does not appear in this response at all.
+
+3. API-facing models (`ExtractionResponse`) — what `/extract-quote` returns:
+   processing metadata, a review summary (missing / uncertain fields and the
+   BRD 2.5 confirmation gate list, computed server-side, never by the LLM),
+   the rule-set fields, and the extraction itself.
+
+The BRD 2.3 comparison list is definitive: 16 rows = insurer + 13 extracted
+fields below + the 2 set fields. Countries covered and exclusions are NOT on
+the confirmed slide (BRD open item) — material notes of that kind belong in
+`additional_info` until the client confirms otherwise.
 """
 
 from typing import Literal
@@ -28,14 +38,23 @@ from pydantic import BaseModel, Field
 # "high"     -> the document states the value plainly.
 # "uncertain"-> ambiguous wording, poor OCR, conflicting figures, or a value
 #               inferred from context rather than an explicit label. The UI
-#               highlights these for broker verification before export.
+#               highlights these for broker verification (BRD: the broker
+#               reviews and corrects before anything is exported).
 Confidence = Literal["high", "uncertain"]
 
 DocumentType = Literal[
     "insurer_quote",          # a quotation / indication of terms
     "credit_limit_schedule",  # standalone buyer credit-limit schedule
-    "policy_document",        # full policy wording / expiring policy
+    "policy_document",        # full policy wording (e.g. the expiring policy)
     "other",                  # anything else (e-mail print, letter, ...)
+]
+
+# BRD 2.5: the four values a broker must confirm before export is enabled.
+CONFIRM_REQUIRED_FIELDS = [
+    "estimated_annual_premium_exc_ipt",
+    "indemnity",
+    "excess",
+    "max_annual_liability",
 ]
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -43,20 +62,22 @@ DocumentType = Literal[
 # ─────────────────────────────────────────────────────────────────────────
 
 class SourcedValue(BaseModel):
-    """A single extracted value, linked to the page it came from (Rule 2)."""
+    """A single extracted value, linked to the page it came from (BRD 2.2)."""
 
     value: str | None = Field(
         description=(
             "The value exactly as found in the document (verbatim, including "
             "currency symbols / % signs / units). null if not present in the "
-            "document. NEVER invent, infer or use placeholder text."
+            "document. NEVER invent, infer or use placeholder text — 'N/A' "
+            "and 'Fixed' are broker entries, not extraction values, unless "
+            "that exact text is printed in the document as the stated value."
         )
     )
     page: int | None = Field(
         description=(
-            "1-based PDF page number where this value was found, taken from "
-            "the '=== PAGE n ===' markers in the input text. null if the "
-            "value is null."
+            "1-based page number where this value was found, taken from the "
+            "'=== PAGE n ===' markers in the input text. null if the value "
+            "is null."
         )
     )
     confidence: Confidence | None = Field(
@@ -71,7 +92,7 @@ class SourcedValue(BaseModel):
 
 
 class BuyerCreditLimit(BaseModel):
-    """One row of a buyer / credit-limit schedule, if present in the PDF."""
+    """One row of a buyer / credit-limit schedule (BRD 2.6)."""
 
     buyer_name: str | None = Field(
         description="Buyer / customer company name as written. null if absent."
@@ -87,17 +108,21 @@ class BuyerCreditLimit(BaseModel):
     )
     limit_offered: str | None = Field(
         description=(
-            "Credit limit offered/approved/granted by the insurer, verbatim. "
+            "Credit limit offered/approved/agreed by the insurer, verbatim. "
             "null if absent."
         )
     )
     page: int | None = Field(
-        description="1-based PDF page number this row was found on."
+        description="1-based page number this row was found on."
     )
 
 
 class QuoteExtraction(BaseModel):
-    """The fixed JSON structure every insurer document is normalized into."""
+    """
+    The extracted portion of the BRD 2.3 comparison list. Deliberately
+    ABSENT (set, never extracted — BRD 2.4): type of policy, debt
+    collection support.
+    """
 
     document_type: DocumentType = Field(
         description=(
@@ -112,132 +137,99 @@ class QuoteExtraction(BaseModel):
     )
     annual_turnover: SourcedValue = Field(
         description=(
-            "Insurable/estimated annual turnover the quote is based on. "
-            "Normalize from terms like 'Insurable Turnover', 'Estimated "
-            "Insurable Turnover', 'Estimated Annual Sales', 'Declared "
-            "Turnover', 'Total Estimated Turnover'. If split (e.g. domestic "
-            "and export), give the total with the split noted."
+            "Insurable/estimated annual turnover the quote is based on. If "
+            "split (e.g. domestic and export), give the total with the split "
+            "noted."
         )
     )
     premium_rate: SourcedValue = Field(
-        description=(
-            "Premium rate, usually a % of turnover. Normalize from 'Rate', "
-            "'Premium Rate', 'Rate per £100', 'Turnover Rate'."
-        )
+        description="Premium rate, usually a percentage of turnover."
     )
     estimated_annual_premium_exc_ipt: SourcedValue = Field(
         description=(
-            "Estimated annual premium EXCLUDING Insurance Premium Tax. "
-            "Normalize from 'Annual Premium', 'Estimated Premium', 'Total "
-            "Estimated Premium', 'Premium Payable', 'Deposit Premium'. If a "
+            "Estimated annual premium EXCLUDING Insurance Premium Tax. If a "
             "figure is explicitly inclusive of IPT and no exclusive figure "
             "is stated, return null rather than recomputing."
         )
     )
     minimum_annual_premium: SourcedValue = Field(
-        description=(
-            "Minimum annual premium. Normalize from 'Minimum Premium', 'MAP', "
-            "'Minimum and Deposit Premium'."
-        )
+        description="Minimum annual premium."
     )
     credit_limit_charges: SourcedValue = Field(
-        description=(
-            "Charges for credit limit checks/decisions. Normalize from "
-            "'Credit Limit Fee', 'Buyer Underwriting Charges', 'Limit "
-            "Assessment Fee', 'Credit Opinion Charges', 'Limit Management "
-            "Charge', 'Annual Administration Charge'."
-        )
+        description="Charges for credit limit checks / decisions."
     )
     indemnity: SourcedValue = Field(
-        description=(
-            "Insured percentage of each loss. Normalize from 'Indemnity', "
-            "'Insured Percentage', 'Cover Level', '% of Cover'."
-        )
+        description="Insured percentage of each loss."
     )
     excess: SourcedValue = Field(
-        description=(
-            "Excess / deductible AMOUNT. Normalize from 'Deductible', "
-            "'Minimum Retention', 'Excess', 'Uninsured Amount', 'Each and "
-            "Every Loss Deductible', 'Aggregate First Loss'."
-        )
+        description="Excess / deductible AMOUNT."
     )
     excess_type: SourcedValue = Field(
         description=(
-            "The insurer's ORIGINAL wording for the kind of excess/deductible "
-            "(e.g. 'Each and Every Loss', 'Aggregate First Loss', 'Non "
-            "Qualifying Loss', 'Minimum Retention', 'Threshold', 'Principal "
-            "Customer Level'). Rule 3 exception: DO NOT normalize this field "
-            "— keep the insurer's exact terminology."
+            "The insurer's ORIGINAL wording for the kind of excess/deductible. "
+            "BRD 2.3 exception: DO NOT normalize this value — keep the "
+            "insurer's exact terminology (e.g. 'Minimum Retention')."
         )
     )
     max_annual_liability: SourcedValue = Field(
-        description=(
-            "Insurer's maximum liability for the policy period. Normalize "
-            "from 'Maximum Liability', 'Maximum Aggregate Liability', 'MAL', "
-            "'Maximum Payable', 'Insurer's Maximum Liability', 'Policy "
-            "Maximum Liability'."
-        )
+        description="Insurer's maximum liability for the policy period."
     )
     discretionary_limit: SourcedValue = Field(
         description=(
-            "Discretionary (credit) limit the policyholder may self-underwrite. "
-            "Normalize from 'Discretionary Limit', 'DL', 'Discretionary Credit "
-            "Limit', 'Self-Underwriting Limit'."
+            "Discretionary (credit) limit the policyholder may self-underwrite."
         )
     )
     max_terms_of_payment: SourcedValue = Field(
-        description=(
-            "Maximum terms of payment insured. Normalize from 'Maximum Terms "
-            "of Payment', 'MTP', 'Maximum Credit Terms', 'Terms of Payment'."
-        )
+        description="Maximum terms of payment insured."
     )
     max_extension_period: SourcedValue = Field(
-        description=(
-            "Maximum extension period for overdue accounts. Normalize from "
-            "'Maximum Extension Period', 'MEP', 'Grace Period'."
-        )
-    )
-    countries_covered: SourcedValue = Field(
-        description=(
-            "Countries / territories the cover applies to, as a comma-"
-            "separated list verbatim from the document. Normalize from "
-            "'Countries Covered', 'Territorial Scope', 'Insured Countries', "
-            "'Country Schedule', 'Whole World excluding ...' (keep the "
-            "exclusion wording)."
-        )
-    )
-    exclusions: SourcedValue = Field(
-        description=(
-            "What the policy explicitly does NOT cover: excluded buyers, "
-            "sectors, countries or debt types. Concise summary using the "
-            "document's own wording. Normalize from 'Exclusions', 'Excluded "
-            "Risks', 'Not Covered', 'Excluded Buyers/Sectors'."
-        )
-    )
-    special_conditions: SourcedValue = Field(
-        description=(
-            "Conditions the insured must meet for cover to apply: warranties, "
-            "subjectivities, conditions precedent, reporting obligations "
-            "specific to this quote. Concise summary using the document's own "
-            "wording. Normalize from 'Special Conditions', 'Warranties', "
-            "'Subjectivities', 'Conditions Precedent'."
-        )
+        description="Maximum extension period for overdue accounts."
     )
     additional_info: SourcedValue = Field(
         description=(
-            "Free-format text: any other material notes a broker should see "
-            "that fit none of the fields above (e.g. no-claims bonus, "
-            "premium payment schedule). Concise plain text; null if nothing "
-            "noteworthy. Do NOT repeat exclusions or special conditions here."
+            "Free-format text: material notes a broker should see that fit "
+            "no field above — e.g. no-claims bonus terms, and any material "
+            "countries-covered, exclusions or special-conditions wording "
+            "(those are not separate comparison rows). Concise plain text; "
+            "null if nothing noteworthy."
         )
     )
     buyer_credit_limits: list[BuyerCreditLimit] = Field(
         description=(
             "All buyer credit-limit rows if the document contains a credit "
-            "limit schedule / buyer list. Empty list if the document has no "
-            "such table."
+            "limit schedule / buyer list — whether a standalone schedule or "
+            "an addendum inside the quote. Empty list if the document has "
+            "no such table."
         )
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+#  Rule-set fields (BRD 2.4 — set, never extracted)
+# ─────────────────────────────────────────────────────────────────────────
+
+class SetField(BaseModel):
+    """A value set by configuration rule, not extracted. Editable in the UI."""
+
+    value: str
+    source: Literal["insurer_rule"]
+    matched_insurer: str | None = Field(
+        description=(
+            "Standing-list insurer name the rule matched on, or null when "
+            "the extracted insurer is not on the standing list (the rule "
+            "then applies its default)."
+        )
+    )
+
+
+class SetFields(BaseModel):
+    """
+    BRD 2.4 rule-set fields the server can compute. Type of policy is also a
+    set field but is broker-selected at project level, so it never appears
+    in an extraction response.
+    """
+
+    debt_collection_support: SetField
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -245,11 +237,13 @@ class QuoteExtraction(BaseModel):
 # ─────────────────────────────────────────────────────────────────────────
 
 class ProcessingMeta(BaseModel):
-    """How the PDF was processed — useful for pilot debugging across formats."""
+    """How the document was processed — pilot debugging across formats."""
 
     filename: str
-    page_count: int
-    extraction_engine: Literal["pymupdf", "azure_document_intelligence"]
+    page_count: int = Field(
+        description="PDF pages, or worksheet count for an Excel schedule."
+    )
+    extraction_engine: Literal["pymupdf", "azure_document_intelligence", "excel"]
     llm_model: str
 
 
@@ -257,14 +251,24 @@ class ReviewSummary(BaseModel):
     """
     What a broker must look at before the comparison is presentation-ready.
     Computed deterministically by the server from the extraction — never by
-    the LLM — so the UI can rely on it.
+    the LLM — so the UI and the export gate can rely on it.
     """
 
     missing_fields: list[str] = Field(
         description="Field names with no value found in the document."
     )
     uncertain_fields: list[str] = Field(
-        description="Field names extracted with 'uncertain' confidence — verify against the source page."
+        description=(
+            "Field names extracted with 'uncertain' confidence — verify "
+            "against the source page."
+        )
+    )
+    confirm_required: list[str] = Field(
+        default=CONFIRM_REQUIRED_FIELDS,
+        description=(
+            "BRD 2.5: the fields a broker must confirm before export is "
+            "enabled, regardless of extraction quality."
+        ),
     )
 
 
@@ -273,4 +277,5 @@ class ExtractionResponse(BaseModel):
 
     meta: ProcessingMeta
     review: ReviewSummary
+    set_fields: SetFields
     data: QuoteExtraction

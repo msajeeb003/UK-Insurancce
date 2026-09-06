@@ -1,0 +1,36 @@
+{
+  "_comment": [
+    "Standing insurer list + debt-collection rule (BRD 2.4).",
+    "This file is CONFIGURATION, not code: adding an insurer or moving one",
+    "between included/outsourced must not require a release. The server",
+    "re-reads this file when it changes on disk.",
+    "debt_collection: 'included' or 'outsourced'. BRD rule: Allianz,",
+    "Atradius and Coface default to Included; every other insurer to",
+    "Outsourced. Both values remain editable per column in the review UI."
+  ],
+  "insurers": [
+    { "id": "allianz",  "name": "Allianz Trade",    "debt_collection": "included" },
+    { "id": "atradius", "name": "Atradius",         "debt_collection": "included" },
+    { "id": "coface",   "name": "Coface",           "debt_collection": "included" },
+    { "id": "tmhcc",    "name": "Tokio Marine HCC", "debt_collection": "outsourced" },
+    { "id": "qbe",      "name": "QBE",              "debt_collection": "outsourced" },
+    { "id": "aig",      "name": "AIG",              "debt_collection": "outsourced" },
+    { "id": "chubb",    "name": "Chubb",            "debt_collection": "outsourced" },
+    { "id": "markel",   "name": "Markel",           "debt_collection": "outsourced" },
+    { "id": "nexus",    "name": "Nexus",            "debt_collection": "outsourced" },
+    { "id": "aviva",    "name": "Aviva",            "debt_collection": "outsourced" }
+  ],
+  "aliases": {
+    "_comment": "Extra names an insurer may use in its documents, mapped to the id above.",
+    "allianz": ["Allianz Trade", "Allianz", "Euler Hermes"],
+    "atradius": ["Atradius", "Atradius Crédito y Caución"],
+    "coface": ["Coface", "Compagnie Française d'Assurance"],
+    "tmhcc": ["Tokio Marine HCC", "TMHCC", "Tokio Marine"],
+    "qbe": ["QBE", "QBE UK LIMITED", "QBE UK"],
+    "aig": ["AIG", "American International Group"],
+    "chubb": ["Chubb"],
+    "markel": ["Markel", "Markel International"],
+    "nexus": ["Nexus", "Nexus Trade Credit"],
+    "aviva": ["Aviva"]
+  }
+}

@@ -1,6 +1,11 @@
 """
-Pipeline orchestrator: PDF bytes -> classified -> text w/ page tags -> LLM
--> validated `ExtractionResponse`.
+Pipeline orchestrator: document bytes -> page-tagged text -> LLM ->
+sanitized, rule-annotated `ExtractionResponse` (BRD 2.2).
+
+Routing:
+  - .pdf   -> PyMuPDF text-layer probe; scanned PDFs fall back to Azure
+              Document Intelligence
+  - .xlsx  -> worksheet extractor (credit-limit schedules, BRD 2.2/2.6)
 
 Kept free of FastAPI imports so it can be unit-tested (and later reused by
 a batch worker) without spinning up the web layer.
@@ -15,6 +20,7 @@ from app.core.errors import InvalidDocumentError
 from app.extraction.azure_extractor import extract_pages_azure
 from app.extraction.base import PageText, to_tagged_document
 from app.extraction.detector import PdfKind, classify_pdf, open_pdf
+from app.extraction.excel_extractor import extract_pages_excel
 from app.extraction.pymupdf_extractor import extract_pages_pymupdf
 from app.llm.openai_extractor import extract_quote_fields
 from app.models.schemas import (
@@ -22,12 +28,16 @@ from app.models.schemas import (
     ProcessingMeta,
     QuoteExtraction,
     ReviewSummary,
+    SetField,
+    SetFields,
     SourcedValue,
 )
+from app.services.library import debt_collection_rule
 
 logger = logging.getLogger(__name__)
 
 EngineOverride = Literal["auto", "digital", "azure"]
+FileKind = Literal["pdf", "excel"]
 
 
 def _sourced_fields(extraction: QuoteExtraction) -> list[tuple[str, SourcedValue]]:
@@ -72,8 +82,8 @@ def _sanitize(extraction: QuoteExtraction, page_count: int) -> QuoteExtraction:
 
 def _build_review(extraction: QuoteExtraction) -> ReviewSummary:
     """
-    Deterministic review summary for the UI / presentation gate — computed
-    from the sanitized extraction, never asked of the LLM.
+    Deterministic review summary for the UI / export gate — computed from
+    the sanitized extraction, never asked of the LLM.
     """
     missing = [name for name, item in _sourced_fields(extraction) if item.value is None]
     uncertain = [
@@ -83,15 +93,50 @@ def _build_review(extraction: QuoteExtraction) -> ReviewSummary:
     return ReviewSummary(missing_fields=missing, uncertain_fields=uncertain)
 
 
+def _build_set_fields(extraction: QuoteExtraction) -> SetFields:
+    """
+    BRD 2.4: debt collection support is set by the insurer rule in
+    config/insurers.json — never extracted. Editable per column in the UI.
+    """
+    value, matched = debt_collection_rule(extraction.insurer.value)
+    return SetFields(
+        debt_collection_support=SetField(
+            value=value, source="insurer_rule", matched_insurer=matched,
+        )
+    )
+
+
+async def _extract_pdf_pages(
+    pdf_bytes: bytes, engine: EngineOverride
+) -> tuple[list[PageText], int, str]:
+    """PDF branch: classify, then PyMuPDF or Azure. Returns (pages, count, engine)."""
+    doc = open_pdf(pdf_bytes)  # raises InvalidDocumentError on bad input
+    try:
+        page_count = doc.page_count
+        if engine == "auto":
+            use_azure = classify_pdf(doc) is PdfKind.SCANNED
+        else:
+            use_azure = engine == "azure"
+
+        if use_azure:
+            # Blocking Azure poller -> worker thread keeps the event loop free.
+            pages = await asyncio.to_thread(extract_pages_azure, pdf_bytes)
+            return pages, page_count, "azure_document_intelligence"
+        return extract_pages_pymupdf(doc), page_count, "pymupdf"
+    finally:
+        doc.close()
+
+
 async def run_extraction_pipeline(
-    pdf_bytes: bytes,
+    file_bytes: bytes,
     filename: str,
     engine: EngineOverride = "auto",
+    file_kind: FileKind = "pdf",
 ) -> ExtractionResponse:
     """
-    Full extraction flow for one uploaded PDF.
+    Full extraction flow for one uploaded document.
 
-    `engine`:
+    `engine` (PDF only):
       - "auto"    detect digital vs scanned (default)
       - "digital" force PyMuPDF
       - "azure"   force Azure DI (e.g. digital PDFs with brutal tables)
@@ -100,40 +145,24 @@ async def run_extraction_pipeline(
     """
     settings = get_settings()
 
-    # ── 1. Open + route ──────────────────────────────────────────────────
-    doc = open_pdf(pdf_bytes)  # raises InvalidDocumentError on bad input
-    try:
-        page_count = doc.page_count
-
-        if engine == "auto":
-            use_azure = classify_pdf(doc) is PdfKind.SCANNED
-        else:
-            use_azure = engine == "azure"
-
-        # ── 2. Extract page-tagged text ──────────────────────────────────
-        if use_azure:
-            # Blocking Azure poller -> worker thread keeps the event loop free.
-            pages: list[PageText] = await asyncio.to_thread(
-                extract_pages_azure, pdf_bytes
-            )
-            engine_used = "azure_document_intelligence"
-        else:
-            pages = extract_pages_pymupdf(doc)
-            engine_used = "pymupdf"
-    finally:
-        doc.close()
+    # ── 1. Extract page-tagged text ──────────────────────────────────────
+    if file_kind == "excel":
+        pages = await asyncio.to_thread(extract_pages_excel, file_bytes)
+        page_count, engine_used = len(pages), "excel"
+    else:
+        pages, page_count, engine_used = await _extract_pdf_pages(file_bytes, engine)
 
     if not any(page.text.strip() for page in pages):
         raise InvalidDocumentError(
-            f"No text could be extracted from this PDF with the "
+            f"No text could be extracted from this document with the "
             f"'{engine_used}' engine."
         )
     tagged_text = to_tagged_document(pages)
 
-    # ── 3. LLM structured extraction (blocking SDK call -> thread) ───────
+    # ── 2. LLM structured extraction (blocking SDK call -> thread) ───────
     extraction = await asyncio.to_thread(extract_quote_fields, tagged_text)
 
-    # ── 4. Defensive validation + review summary ─────────────────────────
+    # ── 3. Defensive validation, review summary, rule-set fields ─────────
     extraction = _sanitize(extraction, page_count)
 
     return ExtractionResponse(
@@ -144,5 +173,6 @@ async def run_extraction_pipeline(
             llm_model=settings.openai_model,
         ),
         review=_build_review(extraction),
+        set_fields=_build_set_fields(extraction),
         data=extraction,
     )
