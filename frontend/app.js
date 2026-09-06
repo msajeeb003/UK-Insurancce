@@ -331,7 +331,9 @@ function cellUncertain(col, field) {
 function cellBg(p, col, field) {
   if (col.id === p.recommended) return 'var(--rec)';
   if (field.set) return 'var(--set-soft)';
-  if (field.confirm && !p.confirmed[field.confirm]) return 'var(--warn-soft)';
+  // Key rows are always tinted: amber until confirmed, green once the
+  // broker selects/confirms them — so the selection is visible.
+  if (field.confirm) return p.confirmed[field.confirm] ? 'var(--ok-soft)' : 'var(--warn-soft)';
   if (cellUncertain(col, field)) return 'var(--warn-soft)';
   return 'transparent';
 }
@@ -676,7 +678,7 @@ function renderReview(p) {
     const keyOn = isKey && p.confirmed[f.confirm];
     return `
     <tr>
-      <th ${isKey ? `data-act="toggleConfirm" data-arg="${f.confirm}" title="Click to ${keyOn ? 'un-confirm' : 'confirm'} this key value"` : ''} style="text-align:left;padding:11px 16px;border-bottom:1px solid var(--line2);background:var(--surface);position:sticky;left:0;z-index:1;vertical-align:top${isKey ? ';cursor:pointer;user-select:none' : ''}">
+      <th ${isKey ? `data-act="toggleConfirm" data-arg="${f.confirm}" title="Click to ${keyOn ? 'un-confirm' : 'confirm'} this key value"` : ''} style="text-align:left;padding:11px 16px;border-bottom:1px solid var(--line2);background:${keyOn ? 'var(--ok-soft)' : 'var(--surface)'};position:sticky;left:0;z-index:1;vertical-align:top${isKey ? ';cursor:pointer;user-select:none' : ''}">
         <div style="display:flex;align-items:center;gap:7px">
           <span style="font-size:13px;font-weight:500;color:var(--ink)">${f.label}</span>
           ${f.tag ? `<span class="mono" style="font-size:9px;font-weight:500;padding:2px 6px;border-radius:4px;background:var(--set-soft);color:var(--set)">${f.tag}</span>` : ''}
@@ -707,6 +709,7 @@ function renderReview(p) {
       <div style="display:flex;gap:16px;font-size:11.5px;color:var(--ink2);align-items:center">
         <span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--set-soft);border:1px solid var(--set)"></span>Set field</span>
         <span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--warn-soft);border:1px solid var(--warn)"></span>Confirm / AI-uncertain</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--ok-soft);border:1px solid var(--ok)"></span>Confirmed</span>
         <span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--rec);border:1px solid var(--accent)"></span>Recommended</span>
       </div>
     </div>
