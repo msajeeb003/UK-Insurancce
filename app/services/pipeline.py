@@ -33,6 +33,7 @@ from app.models.schemas import (
     SourcedValue,
 )
 from app.services.library import debt_collection_rule
+from app.services.verification import verify_extraction
 
 logger = logging.getLogger(__name__)
 
@@ -80,17 +81,23 @@ def _sanitize(extraction: QuoteExtraction, page_count: int) -> QuoteExtraction:
     return extraction
 
 
-def _build_review(extraction: QuoteExtraction) -> ReviewSummary:
+def _build_review(
+    extraction: QuoteExtraction, unverified: list[str]
+) -> ReviewSummary:
     """
     Deterministic review summary for the UI / export gate — computed from
-    the sanitized extraction, never asked of the LLM.
+    the sanitized, verified extraction, never asked of the LLM.
     """
     missing = [name for name, item in _sourced_fields(extraction) if item.value is None]
     uncertain = [
         name for name, item in _sourced_fields(extraction)
         if item.confidence == "uncertain"
     ]
-    return ReviewSummary(missing_fields=missing, uncertain_fields=uncertain)
+    return ReviewSummary(
+        missing_fields=missing,
+        uncertain_fields=uncertain,
+        unverified_fields=unverified,
+    )
 
 
 def _build_set_fields(extraction: QuoteExtraction) -> SetFields:
@@ -162,8 +169,9 @@ async def run_extraction_pipeline(
     # ── 2. LLM structured extraction (blocking SDK call -> thread) ───────
     extraction = await asyncio.to_thread(extract_quote_fields, tagged_text)
 
-    # ── 3. Defensive validation, review summary, rule-set fields ─────────
+    # ── 3. Sanitize, then VERIFY every value against the document ────────
     extraction = _sanitize(extraction, page_count)
+    unverified = verify_extraction(extraction, pages)
 
     return ExtractionResponse(
         meta=ProcessingMeta(
@@ -172,7 +180,7 @@ async def run_extraction_pipeline(
             extraction_engine=engine_used,
             llm_model=settings.openai_model,
         ),
-        review=_build_review(extraction),
+        review=_build_review(extraction, unverified),
         set_fields=_build_set_fields(extraction),
         data=extraction,
     )

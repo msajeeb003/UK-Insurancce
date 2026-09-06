@@ -20,6 +20,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from app.core.errors import ConfigurationError
+
 logger = logging.getLogger(__name__)
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent.parent / "config"
@@ -31,12 +33,30 @@ _cache: dict[str, tuple[float, Any]] = {}  # path -> (mtime, parsed)
 def _load_json(filename: str) -> Any:
     """Read a config file, caching by modification time (thread-safe)."""
     path = CONFIG_DIR / filename
-    mtime = path.stat().st_mtime
+    try:
+        mtime = path.stat().st_mtime
+    except FileNotFoundError as exc:
+        raise ConfigurationError(
+            f"config/{filename} is missing — restore it from the repository."
+        ) from exc
     with _lock:
         cached = _cache.get(filename)
         if cached and cached[0] == mtime:
             return cached[1]
-        data = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            # A stale cached copy is safer than crashing mid-edit; fall back
+            # if we have one, otherwise surface a clear operator error.
+            if cached:
+                logger.error(
+                    "config/%s is invalid JSON (%s) — keeping previous version",
+                    filename, exc,
+                )
+                return cached[1]
+            raise ConfigurationError(
+                f"config/{filename} is not valid JSON — fix the file syntax."
+            ) from exc
         _cache[filename] = (mtime, data)
         logger.info("Loaded config/%s (mtime %s)", filename, mtime)
         return data

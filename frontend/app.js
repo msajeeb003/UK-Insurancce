@@ -905,7 +905,7 @@ function renderSourceModal() {
   if (!state.source) return '';
   return `
   <div class="modal-overlay" data-act="closeSource">
-    <div style="width:520px;max-width:100%;background:var(--surface);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)" onclick="event.stopPropagation()">
+    <div data-act="modalCard" style="width:520px;max-width:100%;background:var(--surface);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px solid var(--line)">
         <div>
           <div style="font-weight:600;font-size:14px">Source document</div>
@@ -990,6 +990,7 @@ const ACTIONS = {
   },
   openSource(caption) { state.source = { caption }; render(); },
   closeSource() { state.source = null; render(); },
+  modalCard() { /* click shield: stops card clicks reaching the overlay's closeSource */ },
 
   addCredit() {
     const p = proj();

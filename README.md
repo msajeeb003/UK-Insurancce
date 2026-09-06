@@ -133,13 +133,32 @@ ruff check .  # lint (style, imports, bugbear, security rules)
 
 CI runs both on every push (`.github/workflows/ci.yml`).
 
+## Accuracy: the verification pass
+
+After the LLM extracts, [verification.py](app/services/verification.py)
+deterministically checks **every value against the actual document text** —
+verbatim first, then per-figure digit matching so "GBP 12,600" verifies
+against a printed "£12,600.00". Wrong page citations are corrected, missing
+ones recovered, and a value found nowhere in the document is downgraded to
+`uncertain`, stripped of its page link, and listed in
+`review.unverified_fields` — a hallucinated-but-plausible number can never
+reach the broker marked as certain. Costs nothing: no extra API calls.
+
 ## Security notes
 
 - Secrets live only in `.env` (gitignored); settings use `SecretStr` so keys
   can't leak into logs or errors. `/health` reports *whether* keys are set,
   never their values.
-- Uploads are capped (25 MB, 60 pages, PDF only) and read in size-checked
-  chunks; error responses never expose internals.
+- Uploads are capped (25 MB, 60 pages / 10 worksheets) and read in
+  size-checked chunks; error responses never expose internals.
+- Per-IP rate limiting on the paid POST endpoints (`RATE_LIMIT_PER_MINUTE`,
+  default 30); presentation payloads are size-capped field by field.
+- Strict Content-Security-Policy (same-origin scripts only, no inline
+  handlers), plus nosniff/frame/referrer headers.
+- Document text is treated as untrusted LLM input: it is fenced between
+  explicit markers and the prompt instructs the model to ignore any
+  instruction-like content inside it (prompt-injection defense), while the
+  strict output schema bounds what a poisoned document could do.
 - The frontend HTML-escapes all extracted content before rendering.
 - Not yet implemented (pilot scope): real authentication, rate limiting,
   server-side project storage. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

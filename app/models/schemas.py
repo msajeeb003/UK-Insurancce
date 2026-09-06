@@ -263,6 +263,15 @@ class ReviewSummary(BaseModel):
             "against the source page."
         )
     )
+    unverified_fields: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Field names whose extracted value could not be found anywhere "
+            "in the document text by the deterministic verification pass — "
+            "possible hallucination; the value is kept but downgraded to "
+            "'uncertain' and its page link cleared."
+        ),
+    )
     confirm_required: list[str] = Field(
         default=CONFIRM_REQUIRED_FIELDS,
         description=(

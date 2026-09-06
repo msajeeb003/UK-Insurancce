@@ -46,7 +46,7 @@ def test_sanitize_clears_bad_page_links(sample_extraction):
 
 def test_review_summary_lists_missing_and_uncertain(sample_extraction):
     out = _sanitize(sample_extraction, page_count=2)
-    review = _build_review(out)
+    review = _build_review(out, unverified=[])
 
     assert "estimated_annual_premium_exc_ipt" in review.missing_fields
     assert "minimum_annual_premium" in review.missing_fields

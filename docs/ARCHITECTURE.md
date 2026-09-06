@@ -37,11 +37,18 @@ POST /extract-quote (PDF or .xlsx upload, ≤25 MB, ≤60 pages)
    insurer list (config/insurers.json)
         │
         ▼
- app/services/pipeline.py :: _sanitize + _build_review + _build_set_fields
-   hallucinated / out-of-range page citations cleared (values kept),
-   confidence flags made consistent, missing/uncertain fields summarized
-   deterministically, and debt collection support SET by the insurer
-   rule (BRD 2.4) — none of this is asked of the LLM
+ app/services/pipeline.py :: _sanitize + verification + review + set fields
+   1) sanitize: out-of-range page cites cleared, confidence made
+      consistent
+   2) app/services/verification.py: EVERY value is checked against the
+      actual document text — verbatim match first, then per-figure digit
+      runs so "GBP 12,600" matches a printed "£12,600.00". Wrong page
+      cites are corrected, dropped ones recovered, and a value found
+      NOWHERE is downgraded to 'uncertain' + listed in
+      review.unverified_fields (anti-hallucination: a wrong number that
+      looks plausible must never reach the broker as certain)
+   3) review summary + debt collection SET by the insurer rule (BRD 2.4)
+   — none of this is asked of the LLM
         │
         ▼
  ExtractionResponse JSON (meta + review + set_fields + data)

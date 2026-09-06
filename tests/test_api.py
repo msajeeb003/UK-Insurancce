@@ -111,7 +111,17 @@ def test_happy_path_with_stubbed_llm(client, digital_pdf, sample_extraction, mon
     }
     # The review summary flags what a broker must check (BRD 2.5).
     assert "minimum_annual_premium" in body["review"]["missing_fields"]
-    assert body["review"]["uncertain_fields"] == ["discretionary_limit"]
+    # The verification pass catches the fixture's fabricated values (they
+    # don't appear in the PDF text) and downgrades them.
+    assert set(body["review"]["unverified_fields"]) == {
+        "excess", "excess_type", "discretionary_limit",
+    }
+    assert set(body["review"]["uncertain_fields"]) == {
+        "excess", "excess_type", "discretionary_limit",
+    }
+    assert body["data"]["excess"]["confidence"] == "uncertain"
+    # Values genuinely present in the PDF stay verified and 'high'.
+    assert body["data"]["annual_turnover"]["confidence"] == "high"
     assert body["review"]["confirm_required"] == [
         "estimated_annual_premium_exc_ipt", "indemnity", "excess",
         "max_annual_liability",

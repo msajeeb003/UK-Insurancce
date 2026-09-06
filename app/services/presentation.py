@@ -125,8 +125,10 @@ def declined_insurers(req: PresentationRequest) -> list[str]:
 
 
 def suggested_filename(req: PresentationRequest, extension: str) -> str:
-    client = re.sub(r"[^\w \-]", "", req.client_name).strip() or "Client"
-    return f"{client} - {cover_title(req)}.{extension}"
+    # ASCII-only: HTTP headers are latin-1 and a non-ASCII client name must
+    # never be able to break the download response.
+    client = re.sub(r"[^A-Za-z0-9 \-]", "", req.client_name).strip() or "Client"
+    return f"{client[:80]} - {cover_title(req)}.{extension}"
 
 
 def _cell_text(value: str | None) -> str:

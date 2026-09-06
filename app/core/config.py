@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     # Documents longer than this are rejected before any paid API call —
     # insurer quotes are short; a 100+ page PDF is almost always a mistake.
     max_pdf_pages: int = 60
+    # Per-client-IP cap on the paid/heavy POST endpoints. 0 disables.
+    rate_limit_per_minute: int = 30
 
     model_config = SettingsConfigDict(
         env_file=".env",
