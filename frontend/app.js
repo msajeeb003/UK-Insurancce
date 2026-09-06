@@ -680,7 +680,6 @@ function renderReview(p) {
         <div style="display:flex;align-items:center;gap:7px">
           <span style="font-size:13px;font-weight:500;color:var(--ink)">${f.label}</span>
           ${f.tag ? `<span class="mono" style="font-size:9px;font-weight:500;padding:2px 6px;border-radius:4px;background:var(--set-soft);color:var(--set)">${f.tag}</span>` : ''}
-          ${isKey ? `<span style="margin-left:auto;flex:none;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;border:1.5px solid ${keyOn ? 'var(--ok)' : 'var(--warn)'};background:${keyOn ? 'var(--ok)' : 'transparent'};color:${keyOn ? '#fff' : 'var(--warn)'}">${keyOn ? '✓' : '○'}</span>` : ''}
         </div>
         ${f.note ? `<div style="font-size:11px;color:var(--ink3);margin-top:2px">${f.note}</div>` : ''}
       </th>
