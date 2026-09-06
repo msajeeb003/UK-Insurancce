@@ -31,3 +31,9 @@ class UpstreamServiceError(PipelineError):
     """OpenAI / Azure failed or returned something unusable."""
 
     status_code = 502
+
+
+class ExportBlockedError(PipelineError):
+    """BRD 2.5/2.8 gate: export refused until the key values are confirmed."""
+
+    status_code = 409

@@ -8,15 +8,22 @@ the server log only, never to the client.
 """
 
 import logging
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile
 
 from app.core.config import get_settings
 from app.core.errors import PipelineError
+from app.models.presentation import PresentationRequest
 from app.models.schemas import ExtractionResponse
 from app.services.library import get_insurers
 from app.services.pipeline import EngineOverride, FileKind, run_extraction_pipeline
+from app.services.presentation import (
+    build_limits_xlsx,
+    build_pdf,
+    build_pptx,
+    suggested_filename,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +58,62 @@ async def insurers() -> dict:
     take effect without a release.
     """
     return {"insurers": get_insurers()}
+
+
+ExportFormat = Literal["pptx", "pdf", "limits-xlsx"]
+
+_EXPORT_BUILDERS = {
+    "pptx": (
+        build_pptx, "pptx",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ),
+    "pdf": (build_pdf, "pdf", "application/pdf"),
+    "limits-xlsx": (
+        build_limits_xlsx, "xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ),
+}
+
+
+@router.post("/generate-presentation")
+async def generate_presentation(
+    request: PresentationRequest,
+    format: Annotated[
+        ExportFormat,
+        Query(description=(
+            "'pptx' — editable PowerPoint (Google Slides compatible); "
+            "'pdf' — the same presentation as PDF; 'limits-xlsx' — the "
+            "buyer credit-limit table as an editable Excel file (BRD 2.6)."
+        )),
+    ] = "pptx",
+) -> Response:
+    """
+    Render the BRD 2.8 presentation from the reviewed project state.
+
+    The BRD 2.5 export gate is enforced server-side: a request whose
+    `confirmed_fields` is missing any of the four key values gets a 409.
+    Regenerating simply replaces the broker's previous download — no
+    versioning in this build. Nothing is sent from the system.
+    """
+    builder, extension, media_type = _EXPORT_BUILDERS[format]
+    try:
+        content = builder(request)
+    except PipelineError as exc:
+        logger.warning("Export refused for %r: %s", request.client_name, exc)
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Presentation generation failed for %r", request.client_name)
+        raise HTTPException(
+            status_code=500,
+            detail="Presentation generation failed unexpectedly. Check the server logs.",
+        ) from exc
+
+    filename = suggested_filename(request, extension)
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _resolve_file_kind(filename: str, content_type: str | None) -> FileKind:

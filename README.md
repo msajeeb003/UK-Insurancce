@@ -143,3 +143,17 @@ CI runs both on every push (`.github/workflows/ci.yml`).
 - The frontend HTML-escapes all extracted content before rendering.
 - Not yet implemented (pilot scope): real authentication, rate limiting,
   server-side project storage. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Presentation export (BRD 2.8)
+
+`POST /generate-presentation?format=pptx|pdf|limits-xlsx` renders the
+reviewed project state into the 7-page presentation — cover (new-business /
+renewal title), about, important information (with the auto-generated
+declined-to-quote line), the 16-field terms comparison with the recommended
+column highlighted, buyer credit limits (omitted cleanly when none),
+comments & recommendation (name merged into the fixed FCA wording), and
+contact. The PPTX uses only standard shapes/tables so it opens and edits
+cleanly in Google Slides; `limits-xlsx` exports the buyer table as editable
+Excel (BRD 2.6). The BRD 2.5 gate is enforced server-side: requests missing
+any of the four confirmed key values get a 409. Regenerating replaces the
+previous download; nothing is ever sent from the system.

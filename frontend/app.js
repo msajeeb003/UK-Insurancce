@@ -888,6 +888,7 @@ function renderExport(p) {
       <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
         <button data-act="exportPpt" ${done ? '' : 'disabled'} class="btn" style="padding:12px;border-radius:9px;background:${done ? 'var(--accent)' : '#e7eaef'};color:${done ? '#fff' : 'var(--ink3)'};opacity:${done ? '1' : '.7'};cursor:${done ? 'pointer' : 'not-allowed'}">${ICON.download}Download PowerPoint</button>
         <button data-act="exportPdf" ${done ? '' : 'disabled'} class="btn" style="padding:12px;border-radius:9px;background:var(--surface);border:1px solid ${done ? 'var(--accent)' : 'var(--line)'};color:${done ? 'var(--accent)' : 'var(--ink3)'};opacity:${done ? '1' : '.7'};cursor:${done ? 'pointer' : 'not-allowed'}">${ICON.download}Download PDF</button>
+        ${p.credit.length && done ? `<div data-act="exportLimitsXlsx" style="font-size:12px;color:var(--accent);cursor:pointer;font-weight:500;text-align:center">Credit limits as Excel ↓</div>` : ''}
       </div>
       <div style="background:${done ? 'var(--ok-soft)' : 'var(--warn-soft)'};border:1px solid ${done ? 'var(--ok)' : 'var(--warn)'};border-radius:9px;padding:11px 13px;font-size:12px;line-height:1.5;color:${done ? 'var(--ok)' : 'var(--warn)'}">${done ? '✓ All key values confirmed. Export is enabled.' : '⚠ Export is blocked until Est. premium, indemnity, excess and max liability are confirmed on the review screen (' + nLeft + ' remaining).'}</div>
       ${p.exported && done ? `<div style="margin-top:12px;background:var(--ok-soft);color:var(--ok);border-radius:8px;padding:10px 12px;font-size:12.5px;font-weight:500">✓ Files generated — ready to proofread &amp; send.</div>` : ''}
@@ -1002,19 +1003,85 @@ const ACTIONS = {
   },
 
   flipType() { const p = proj(); p.projectType = p.projectType === 'new' ? 'renewal' : 'new'; touch(p); render(); },
-  exportPdf() {
+  async exportPdf() {
     const p = proj();
     if (!allConfirmed(p)) return;
-    p.exported = true; p.status = 'ready'; touch(p); render();
-    window.print();  // print stylesheet shows only the presentation preview
+    if (await downloadExport('pdf')) { p.exported = true; p.status = 'ready'; touch(p); render(); }
   },
-  exportPpt() {
+  async exportPpt() {
     const p = proj();
     if (!allConfirmed(p)) return;
-    p.exported = true; p.status = 'ready'; touch(p); render();
-    alert('PowerPoint generation runs server-side and is the next backend module.\nThe PDF export (print) is available now.');
+    if (await downloadExport('pptx')) { p.exported = true; p.status = 'ready'; touch(p); render(); }
   },
+  exportLimitsXlsx() { downloadExport('limits-xlsx'); },
 };
+
+/* ── Presentation export (BRD 2.8) — server renders PPTX/PDF/xlsx ──── */
+const CONFIRM_FIELD_MAP = {
+  premium: 'estimated_annual_premium_exc_ipt',
+  indemnity: 'indemnity',
+  excess: 'excess',
+  maxLiability: 'max_annual_liability',
+};
+
+function buildPresentationPayload(p) {
+  const columns = p.columns.map(col => {
+    const values = {};
+    for (const f of FIELDS) values[f.key] = cellValue(p, col, f) || '';
+    return { id: col.id, name: col.name, values };
+  });
+  return {
+    client_name: p.clientName || 'Client',
+    reference: p.ref || '',
+    project_type: p.projectType === 'renewal' ? 'renewal' : 'new',
+    columns,
+    recommended_id: p.recommended,
+    approached_insurers: p.approached
+      .map(id => (INSURERS.find(i => i.id === id) || {}).name)
+      .filter(Boolean),
+    credit_limits: p.credit.map(r => ({
+      buyer: r.buyer || '', company_number: r.reg || '',
+      required: r.req || '', offers: r.offers || {},
+    })),
+    notes: p.notes || '',
+    reasons: p.reasons || '',
+    confirmed_fields: Object.keys(p.confirmed)
+      .filter(k => p.confirmed[k])
+      .map(k => CONFIRM_FIELD_MAP[k])
+      .filter(Boolean),
+  };
+}
+
+async function downloadExport(format) {
+  const p = proj(); if (!p) return false;
+  try {
+    const res = await fetch('/generate-presentation?format=' + format, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildPresentationPayload(p)),
+    });
+    if (!res.ok) {
+      let detail = 'HTTP ' + res.status;
+      try { detail = (await res.json()).detail || detail; } catch (e) {}
+      alert('Export failed: ' + detail);
+      return false;
+    }
+    const blob = await res.blob();
+    const match = (res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/);
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = match ? match[1]
+      : (p.clientName || 'presentation') + '.' + (format === 'limits-xlsx' ? 'xlsx' : format);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(link.href);
+    return true;
+  } catch (err) {
+    alert('Export failed: ' + (err.message || 'network error'));
+    return false;
+  }
+}
 
 /* ── Event delegation ──────────────────────────────────────────────── */
 document.addEventListener('click', e => {
