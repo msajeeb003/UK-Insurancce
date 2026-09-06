@@ -609,23 +609,23 @@ function renderUpload(p) {
     <input type="file" id="file-limits" accept="application/pdf,.xlsx,.xls" multiple hidden>
     <input type="file" id="file-expiring" accept="application/pdf" hidden>
     <div style="display:grid;grid-template-columns:${isRen ? '1fr 1fr 1fr' : '1fr 1fr'};gap:16px;margin-bottom:24px">
-      <div style="border:1.5px dashed var(--line);border-radius:12px;padding:24px 18px;text-align:center;background:var(--surface)">
-        <div style="width:38px;height:38px;border-radius:9px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;margin:0 auto 12px">${ICON.upload}</div>
-        <div style="font-weight:600;font-size:14px;margin-bottom:3px">Quotes</div>
-        <div style="font-size:12px;color:var(--ink2);margin-bottom:14px">PDF, incl. scanned. Up to 6.</div>
+      <div data-drop="quote" style="border:1.5px dashed var(--line);border-radius:12px;padding:24px 18px;text-align:center;background:var(--surface)">
+        <div style="width:38px;height:38px;border-radius:9px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;margin:0 auto 12px;pointer-events:none">${ICON.upload}</div>
+        <div style="font-weight:600;font-size:14px;margin-bottom:3px;pointer-events:none">Quotes</div>
+        <div style="font-size:12px;color:var(--ink2);margin-bottom:14px;pointer-events:none">Drag &amp; drop PDFs here, incl. scanned. Up to 6.</div>
         <button class="btn-soft" data-act="pickFile" data-arg="file-quote">Choose files</button>
       </div>
-      <div style="border:1.5px dashed var(--line);border-radius:12px;padding:24px 18px;text-align:center;background:var(--surface)">
-        <div style="width:38px;height:38px;border-radius:9px;background:var(--panel);color:var(--ink2);display:grid;place-items:center;margin:0 auto 12px">${ICON.table}</div>
-        <div style="font-weight:600;font-size:14px;margin-bottom:3px">Credit-limit docs</div>
-        <div style="font-size:12px;color:var(--ink2);margin-bottom:14px">PDF or Excel. Optional.</div>
+      <div data-drop="limits" style="border:1.5px dashed var(--line);border-radius:12px;padding:24px 18px;text-align:center;background:var(--surface)">
+        <div style="width:38px;height:38px;border-radius:9px;background:var(--panel);color:var(--ink2);display:grid;place-items:center;margin:0 auto 12px;pointer-events:none">${ICON.table}</div>
+        <div style="font-weight:600;font-size:14px;margin-bottom:3px;pointer-events:none">Credit-limit docs</div>
+        <div style="font-size:12px;color:var(--ink2);margin-bottom:14px;pointer-events:none">Drag &amp; drop — PDF or Excel. Optional.</div>
         <button data-act="pickFile" data-arg="file-limits" style="font-size:12.5px;font-weight:600;color:var(--ink2);background:var(--panel);border:1px solid var(--line);padding:8px 14px;border-radius:7px;cursor:pointer">Choose files</button>
       </div>
       ${isRen ? `
-      <div style="border:1.5px dashed var(--warn);border-radius:12px;padding:24px 18px;text-align:center;background:var(--warn-soft)">
-        <div style="width:38px;height:38px;border-radius:9px;background:#fff;color:var(--warn);display:grid;place-items:center;margin:0 auto 12px">${ICON.refresh}</div>
-        <div style="font-weight:600;font-size:14px;margin-bottom:3px">Expiring policy</div>
-        <div style="font-size:12px;color:var(--warn);margin-bottom:14px">Required for renewal.</div>
+      <div data-drop="expiring" style="border:1.5px dashed var(--warn);border-radius:12px;padding:24px 18px;text-align:center;background:var(--warn-soft)">
+        <div style="width:38px;height:38px;border-radius:9px;background:#fff;color:var(--warn);display:grid;place-items:center;margin:0 auto 12px;pointer-events:none">${ICON.refresh}</div>
+        <div style="font-weight:600;font-size:14px;margin-bottom:3px;pointer-events:none">Expiring policy</div>
+        <div style="font-size:12px;color:var(--warn);margin-bottom:14px;pointer-events:none">Drag &amp; drop — required for renewal.</div>
         <button data-act="pickFile" data-arg="file-expiring" style="font-size:12.5px;font-weight:600;color:var(--warn);background:#fff;border:1px solid var(--warn);padding:8px 14px;border-radius:7px;cursor:pointer">Choose file</button>
       </div>` : ''}
     </div>
@@ -968,7 +968,13 @@ const ACTIONS = {
   },
 
   toggleConfirm(k) { const p = proj(); p.confirmed[k] = !p.confirmed[k]; touch(p); render(); },
-  pickRec(colId) { const p = proj(); p.recommended = colId; touch(p); render(); },
+  pickRec(colId) {
+    // BRD 2.7: changing the selection updates the highlight; selecting the
+    // already-recommended insurer again UNSELECTS it and clears the highlight.
+    const p = proj();
+    p.recommended = p.recommended === colId ? null : colId;
+    touch(p); render();
+  },
   addColumn() {
     const p = proj();
     p.columns.push({ id: 'm' + (p.manualSeq++), name: 'Free-format column', manual: true, data: {}, debt: '' });
@@ -1083,6 +1089,32 @@ document.addEventListener('change', e => {
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && state.screen === 'login') ACTIONS.signIn();
   if (e.key === 'Escape' && state.source) ACTIONS.closeSource();
+});
+
+/* ── Drag-and-drop upload (BRD 2.1: drag-and-drop with picker fallback) ── */
+document.addEventListener('dragover', e => {
+  const zone = e.target.closest('[data-drop]');
+  if (zone) {
+    e.preventDefault();
+    zone.style.borderColor = 'var(--accent)';
+    zone.style.background = 'var(--accent-soft)';
+  }
+});
+document.addEventListener('dragleave', e => {
+  const zone = e.target.closest('[data-drop]');
+  if (zone && !zone.contains(e.relatedTarget)) {
+    zone.style.borderColor = '';
+    zone.style.background = '';
+  }
+});
+document.addEventListener('drop', e => {
+  const zone = e.target.closest('[data-drop]');
+  if (!zone) return;
+  e.preventDefault();
+  zone.style.borderColor = '';
+  zone.style.background = '';
+  const files = Array.from(e.dataTransfer.files);
+  if (files.length) uploadFiles(zone.dataset.drop, files);
 });
 
 /* ── Boot ──────────────────────────────────────────────────────────── */
