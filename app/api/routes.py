@@ -40,17 +40,20 @@ EXCEL_CONTENT_TYPES = {
 @router.get("/health")
 async def health() -> dict:
     """Liveness probe + config sanity check (no secrets exposed)."""
+    from app.extraction.docling_extractor import docling_available
     from app.llm.router import active_model_label
 
     settings = get_settings()
+    azure = bool(settings.azure_endpoint and settings.azure_key.get_secret_value())
+    docling = docling_available()
     return {
         "status": "ok",
         "llm": active_model_label(),  # e.g. "anthropic:claude-haiku-4-5"
         "openai_configured": bool(settings.openai_api_key.get_secret_value()),
         "anthropic_configured": bool(settings.anthropic_api_key.get_secret_value()),
-        "azure_configured": bool(
-            settings.azure_endpoint and settings.azure_key.get_secret_value()
-        ),
+        "azure_configured": azure,
+        "docling_installed": docling,
+        "scanned_pdf_engine": "azure" if azure else ("docling" if docling else "none"),
     }
 
 
@@ -169,9 +172,10 @@ async def extract_quote(
         EngineOverride,
         Query(
             description=(
-                "PDF extraction engine: 'auto' detects digital vs scanned, "
-                "'digital' forces PyMuPDF, 'azure' forces Azure Document "
-                "Intelligence OCR. Ignored for Excel uploads."
+                "PDF extraction engine: 'auto' detects digital vs scanned "
+                "(scans use Azure when configured, else Docling), 'digital' "
+                "forces PyMuPDF, 'azure' forces Azure Document Intelligence, "
+                "'docling' forces the open-source OCR. Ignored for Excel."
             ),
         ),
     ] = "auto",

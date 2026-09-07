@@ -1,0 +1,4 @@
+# Optional open-source OCR for scanned PDFs (BRD 2.2) — used when Azure
+# Document Intelligence is not configured. Heavy install (pulls PyTorch);
+# kept out of requirements.txt so the base app and CI stay lean.
+docling==2.55.1

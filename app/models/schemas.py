@@ -243,7 +243,9 @@ class ProcessingMeta(BaseModel):
     page_count: int = Field(
         description="PDF pages, or worksheet count for an Excel schedule."
     )
-    extraction_engine: Literal["pymupdf", "azure_document_intelligence", "excel"]
+    extraction_engine: Literal[
+        "pymupdf", "azure_document_intelligence", "docling", "excel"
+    ]
     llm_model: str
 
 

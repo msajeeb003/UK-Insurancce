@@ -3,8 +3,8 @@ Pipeline orchestrator: document bytes -> page-tagged text -> LLM ->
 sanitized, rule-annotated `ExtractionResponse` (BRD 2.2).
 
 Routing:
-  - .pdf   -> PyMuPDF text-layer probe; scanned PDFs fall back to Azure
-              Document Intelligence
+  - .pdf   -> PyMuPDF text-layer probe; scanned PDFs go to Azure Document
+              Intelligence when configured, else open-source Docling OCR
   - .xlsx  -> worksheet extractor (credit-limit schedules, BRD 2.2/2.6)
 
 Kept free of FastAPI imports so it can be unit-tested (and later reused by
@@ -15,10 +15,12 @@ import asyncio
 import logging
 from typing import Literal
 
+from app.core.config import get_settings
 from app.core.errors import InvalidDocumentError
 from app.extraction.azure_extractor import extract_pages_azure
 from app.extraction.base import PageText, to_tagged_document
 from app.extraction.detector import PdfKind, classify_pdf, open_pdf
+from app.extraction.docling_extractor import extract_pages_docling
 from app.extraction.excel_extractor import extract_pages_excel
 from app.extraction.pymupdf_extractor import extract_pages_pymupdf
 from app.llm.router import active_model_label, extract_quote_fields
@@ -36,7 +38,7 @@ from app.services.verification import verify_extraction
 
 logger = logging.getLogger(__name__)
 
-EngineOverride = Literal["auto", "digital", "azure"]
+EngineOverride = Literal["auto", "digital", "azure", "docling"]
 FileKind = Literal["pdf", "excel"]
 
 
@@ -112,25 +114,44 @@ def _build_set_fields(extraction: QuoteExtraction) -> SetFields:
     )
 
 
+def _scanned_engine(override: EngineOverride) -> str:
+    """
+    BRD 2.2 scanned-PDF routing: Azure Document Intelligence when its keys
+    are configured, otherwise the open-source Docling OCR. An explicit
+    engine override always wins.
+    """
+    if override in ("azure", "docling"):
+        return override
+    settings = get_settings()
+    if settings.azure_endpoint and settings.azure_key.get_secret_value():
+        return "azure"
+    return "docling"
+
+
 async def _extract_pdf_pages(
     pdf_bytes: bytes, engine: EngineOverride
 ) -> tuple[list[PageText], int, str]:
-    """PDF branch: classify, then PyMuPDF or Azure. Returns (pages, count, engine)."""
+    """PDF branch: classify, then PyMuPDF / Azure / Docling. Returns
+    (pages, count, engine)."""
     doc = open_pdf(pdf_bytes)  # raises InvalidDocumentError on bad input
     try:
         page_count = doc.page_count
         if engine == "auto":
-            use_azure = classify_pdf(doc) is PdfKind.SCANNED
+            scanned = classify_pdf(doc) is PdfKind.SCANNED
         else:
-            use_azure = engine == "azure"
+            scanned = engine in ("azure", "docling")
 
-        if use_azure:
-            # Blocking Azure poller -> worker thread keeps the event loop free.
-            pages = await asyncio.to_thread(extract_pages_azure, pdf_bytes)
-            return pages, page_count, "azure_document_intelligence"
-        return extract_pages_pymupdf(doc), page_count, "pymupdf"
+        if not scanned:
+            return extract_pages_pymupdf(doc), page_count, "pymupdf"
     finally:
         doc.close()
+
+    # Blocking OCR calls -> worker thread keeps the event loop free.
+    if _scanned_engine(engine) == "azure":
+        pages = await asyncio.to_thread(extract_pages_azure, pdf_bytes)
+        return pages, page_count, "azure_document_intelligence"
+    pages = await asyncio.to_thread(extract_pages_docling, pdf_bytes)
+    return pages, page_count, "docling"
 
 
 async def run_extraction_pipeline(
@@ -146,6 +167,7 @@ async def run_extraction_pipeline(
       - "auto"    detect digital vs scanned (default)
       - "digital" force PyMuPDF
       - "azure"   force Azure DI (e.g. digital PDFs with brutal tables)
+      - "docling" force the open-source OCR
 
     Raises `PipelineError` subclasses; the API layer maps them to HTTP.
     """

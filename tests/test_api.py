@@ -19,8 +19,9 @@ def test_health(client):
     assert body["status"] == "ok"
     assert set(body) == {
         "status", "llm", "openai_configured", "anthropic_configured",
-        "azure_configured",
+        "azure_configured", "docling_installed", "scanned_pdf_engine",
     }
+    assert body["scanned_pdf_engine"] in ("azure", "docling", "none")
 
 
 def test_insurers_endpoint_serves_configuration(client):

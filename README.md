@@ -5,9 +5,10 @@ review AI-extracted terms side by side, pick a recommendation, and generate a
 client presentation.
 
 - **Backend** — FastAPI pipeline: PyMuPDF (digital PDFs) / Azure Document
-  Intelligence (scanned PDFs) → OpenAI Structured Outputs → normalized,
-  source-linked JSON. Every value carries the PDF page it came from; missing
-  values stay `null` — the system never guesses.
+  Intelligence or open-source Docling OCR (scanned PDFs) → LLM Structured
+  Outputs (Claude or OpenAI) → normalized, source-linked JSON. Every value
+  carries the PDF page it came from; missing values stay `null` — the
+  system never guesses.
 - **Frontend** — wireframe-faithful broker flow served at `/`:
   Login → Projects → Setup → Upload → Review & edit → Buyer credit limits →
   Recommendation → Generate & export.
@@ -132,6 +133,23 @@ ruff check .  # lint (style, imports, bugbear, security rules)
 ```
 
 CI runs both on every push (`.github/workflows/ci.yml`).
+
+## Scanned PDFs — OCR engines
+
+Scanned uploads route to **Azure Document Intelligence when its keys are
+configured**, otherwise to the open-source **[Docling](https://github.com/docling-project/docling)**
+engine (IBM) — chosen over Tesseract/EasyOCR/PaddleOCR because it is the
+only pip-only option that reconstructs **table structure**, which buyer
+credit-limit schedules depend on. Docling is a heavy optional dependency
+(PyTorch); install it with:
+
+```bash
+pip install -r requirements-ocr.txt
+```
+
+The first conversion downloads models and is slow; later ones are faster.
+Force an engine per upload with `?engine=azure` or `?engine=docling`;
+`/health` reports which scanned-PDF engine is active.
 
 ## LLM providers
 
