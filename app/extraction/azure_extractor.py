@@ -26,7 +26,7 @@ from azure.core.credentials import AzureKeyCredential
 
 from app.core.config import get_settings
 from app.core.errors import ConfigurationError
-from app.extraction.base import PageText
+from app.extraction.base import PageText, clean_text
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ def extract_pages_azure(pdf_bytes: bytes) -> list[PageText]:
         sections = ["\n".join(lines_by_page.get(page_no, []))]
         for i, table_md in enumerate(tables_by_page.get(page_no, []), start=1):
             sections.append(f"[TABLE {i} ON THIS PAGE]\n{table_md}")
-        pages.append(PageText(page_number=page_no, text="\n\n".join(sections)))
+        pages.append(PageText(page_number=page_no, text=clean_text("\n\n".join(sections))))
 
     logger.info(
         "Azure DI extracted %d pages, %d tables",

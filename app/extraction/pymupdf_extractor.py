@@ -11,7 +11,7 @@ import logging
 
 import pymupdf
 
-from app.extraction.base import PageText
+from app.extraction.base import PageText, clean_text
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ def extract_pages_pymupdf(doc: pymupdf.Document) -> list[PageText]:
         text_blocks.sort(key=lambda b: (round(b[1], 1), round(b[0], 1)))
 
         page_text = "\n".join(b[4].strip() for b in text_blocks if b[4].strip())
-        pages.append(PageText(page_number=page_index + 1, text=page_text))
+        pages.append(PageText(page_number=page_index + 1, text=clean_text(page_text)))
 
     logger.info("PyMuPDF extracted %d pages", len(pages))
     return pages

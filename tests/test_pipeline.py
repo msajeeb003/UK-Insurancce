@@ -1,6 +1,6 @@
 """Pipeline internals: text extraction shape and the source-link sanitizer."""
 
-from app.extraction.base import to_tagged_document
+from app.extraction.base import clean_text, to_tagged_document
 from app.extraction.detector import open_pdf
 from app.extraction.pymupdf_extractor import extract_pages_pymupdf
 from app.services.pipeline import _build_review, _sanitize
@@ -21,6 +21,13 @@ def test_pymupdf_extraction_and_page_tags(digital_pdf):
     assert "=== PAGE 2 ===" in tagged
     # Page markers must precede their page's content.
     assert tagged.index("=== PAGE 1 ===") < tagged.index("Insurable Turnover")
+
+
+def test_mojibake_text_layer_is_cleaned():
+    # Seen in a real insurer PDF: a Latin-1-mangled text layer.
+    assert clean_text("Annual Turnover: Â£3,750,000") == "Annual Turnover: £3,750,000"
+    assert clean_text("the insurerâ€™s standard terms â€“ fixed") == "the insurer's standard terms – fixed"
+    assert clean_text("plain £ text stays") == "plain £ text stays"
 
 
 def test_sanitize_clears_bad_page_links(sample_extraction):
