@@ -15,14 +15,13 @@ import asyncio
 import logging
 from typing import Literal
 
-from app.core.config import get_settings
 from app.core.errors import InvalidDocumentError
 from app.extraction.azure_extractor import extract_pages_azure
 from app.extraction.base import PageText, to_tagged_document
 from app.extraction.detector import PdfKind, classify_pdf, open_pdf
 from app.extraction.excel_extractor import extract_pages_excel
 from app.extraction.pymupdf_extractor import extract_pages_pymupdf
-from app.llm.openai_extractor import extract_quote_fields
+from app.llm.router import active_model_label, extract_quote_fields
 from app.models.schemas import (
     ExtractionResponse,
     ProcessingMeta,
@@ -150,8 +149,6 @@ async def run_extraction_pipeline(
 
     Raises `PipelineError` subclasses; the API layer maps them to HTTP.
     """
-    settings = get_settings()
-
     # ── 1. Extract page-tagged text ──────────────────────────────────────
     if file_kind == "excel":
         pages = await asyncio.to_thread(extract_pages_excel, file_bytes)
@@ -178,7 +175,7 @@ async def run_extraction_pipeline(
             filename=filename,
             page_count=page_count,
             extraction_engine=engine_used,
-            llm_model=settings.openai_model,
+            llm_model=active_model_label(),
         ),
         review=_build_review(extraction, unverified),
         set_fields=_build_set_fields(extraction),

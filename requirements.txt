@@ -7,6 +7,7 @@ azure-ai-documentintelligence==1.0.2
 openpyxl==3.1.5
 python-pptx==1.0.2
 openai==3.8.0
+anthropic==1.4.0
 pydantic==2.13.5
 pydantic-settings==2.15.0
 python-dotenv==1.2.3

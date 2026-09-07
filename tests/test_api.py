@@ -17,7 +17,10 @@ def test_health(client):
     assert res.status_code == 200
     body = res.json()
     assert body["status"] == "ok"
-    assert set(body) == {"status", "openai_configured", "azure_configured"}
+    assert set(body) == {
+        "status", "llm", "openai_configured", "anthropic_configured",
+        "azure_configured",
+    }
 
 
 def test_insurers_endpoint_serves_configuration(client):
@@ -74,18 +77,20 @@ def test_rejects_garbage_pdf(client):
     assert res.status_code == 422
 
 
-def test_missing_api_key_is_503_without_leaking(client, digital_pdf, monkeypatch):
+def test_no_provider_configured_is_503_without_leaking(client, digital_pdf, monkeypatch):
     from pydantic import SecretStr
 
     from app.core.config import get_settings
-    from app.llm import openai_extractor
-    monkeypatch.setattr(get_settings(), "openai_api_key", SecretStr(""))
-    openai_extractor._get_client.cache_clear()
+    settings = get_settings()
+    monkeypatch.setattr(settings, "llm_provider", "auto")
+    monkeypatch.setattr(settings, "openai_api_key", SecretStr(""))
+    monkeypatch.setattr(settings, "anthropic_api_key", SecretStr(""))
     res = client.post(
         "/extract-quote", files={"file": ("q.pdf", digital_pdf, "application/pdf")}
     )
     assert res.status_code == 503
-    assert "OPENAI_API_KEY" in res.json()["detail"]
+    detail = res.json()["detail"]
+    assert "OPENAI_API_KEY" in detail and "ANTHROPIC_API_KEY" in detail
     assert "Traceback" not in res.text
 
 

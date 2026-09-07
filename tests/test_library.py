@@ -1,6 +1,6 @@
 """Mapping library + insurer rule (BRD 2.3/2.4) — configuration, not code."""
 
-from app.llm.openai_extractor import build_system_prompt
+from app.llm.prompt import build_system_prompt
 from app.services.library import debt_collection_rule, get_terminology, match_insurer
 
 

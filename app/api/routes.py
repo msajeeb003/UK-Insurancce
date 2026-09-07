@@ -40,10 +40,14 @@ EXCEL_CONTENT_TYPES = {
 @router.get("/health")
 async def health() -> dict:
     """Liveness probe + config sanity check (no secrets exposed)."""
+    from app.llm.router import active_model_label
+
     settings = get_settings()
     return {
         "status": "ok",
+        "llm": active_model_label(),  # e.g. "anthropic:claude-haiku-4-5"
         "openai_configured": bool(settings.openai_api_key.get_secret_value()),
+        "anthropic_configured": bool(settings.anthropic_api_key.get_secret_value()),
         "azure_configured": bool(
             settings.azure_endpoint and settings.azure_key.get_secret_value()
         ),

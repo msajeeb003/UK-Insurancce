@@ -13,17 +13,29 @@ logging, or error messages — use `.get_secret_value()` at the call site.
 """
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # ── LLM provider selection ───────────────────────────────────────────
+    # "auto" uses OpenAI when its key is set, else the Claude API.
+    # Pin explicitly with LLM_PROVIDER=openai|anthropic in .env.
+    llm_provider: Literal["auto", "openai", "anthropic"] = "auto"
+
     # ── OpenAI (Structured Output extraction) ────────────────────────────
     openai_api_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-4o-2024-08-06"
     openai_timeout_seconds: float = 120.0
     openai_max_retries: int = 2
+
+    # ── Claude API (Anthropic SDK, structured outputs) ───────────────────
+    anthropic_api_key: SecretStr = SecretStr("")
+    anthropic_model: str = "claude-haiku-4-5"
+    anthropic_timeout_seconds: float = 120.0
+    anthropic_max_retries: int = 2
 
     # ── Azure AI Document Intelligence (OCR fallback) ────────────────────
     azure_endpoint: str = ""

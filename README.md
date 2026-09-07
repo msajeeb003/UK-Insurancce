@@ -133,6 +133,21 @@ ruff check .  # lint (style, imports, bugbear, security rules)
 
 CI runs both on every push (`.github/workflows/ci.yml`).
 
+## LLM providers
+
+Extraction runs on either provider behind one shared prompt and one schema
+— switching can never change the extraction contract:
+
+| `.env` | Effect |
+|---|---|
+| `LLM_PROVIDER=auto` (default) | OpenAI when `OPENAI_API_KEY` is set, else the Claude API |
+| `LLM_PROVIDER=openai` | OpenAI Responses API (`OPENAI_MODEL`, default gpt-4o) |
+| `LLM_PROVIDER=anthropic` | Claude API (`ANTHROPIC_MODEL`, default `claude-haiku-4-5`) |
+
+`/health` reports the active provider as `llm` (e.g.
+`"anthropic:claude-haiku-4-5"`), and every extraction's `meta.llm_model`
+records which provider/model produced it.
+
 ## Accuracy: the verification pass
 
 After the LLM extracts, [verification.py](app/services/verification.py)
