@@ -30,7 +30,9 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+# backend/app/main.py -> repo root -> frontend/ (kept fully separate from
+# the backend; the server only serves its static files).
+FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
 app = FastAPI(
     title="Insurance Quote Extraction API",

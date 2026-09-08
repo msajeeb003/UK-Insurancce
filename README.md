@@ -13,42 +13,41 @@ client presentation.
   Login → Projects → Setup → Upload → Review & edit → Buyer credit limits →
   Recommendation → Generate & export.
 
-## Repository layout
+## Repository layout — modular, frontend fully separate from backend
 
 ```
-├── app/                    FastAPI backend
-│   ├── main.py             App entrypoint: wiring, middleware, frontend mount
-│   ├── api/routes.py       HTTP endpoints (/extract-quote, /health)
-│   ├── core/
-│   │   ├── config.py       Settings from .env (keys, thresholds, limits)
-│   │   └── errors.py       Client-safe exception hierarchy → HTTP statuses
-│   ├── models/schemas.py   Pydantic models (strict LLM schema + API responses)
-│   ├── services/pipeline.py  Orchestrator: detect → extract → LLM → sanitize
-│   ├── extraction/         PDF → page-tagged text
-│   │   ├── detector.py     Digital-vs-scanned classification
-│   │   ├── pymupdf_extractor.py   Digital PDFs (position-ordered blocks)
-│   │   ├── azure_extractor.py     Scanned PDFs (OCR + table grids)
-│   │   └── base.py         Shared PageText type + page markers
-│   └── llm/openai_extractor.py    OpenAI Responses API call
-├── config/                 CONFIGURATION, not code (BRD 2.4) — edits need no release
-│   ├── insurers.json       Standing insurer list, aliases, debt-collection rule
-│   └── terminology.json    Mapping library: insurer wordings per comparison row
-├── frontend/               Vanilla SPA (index.html, app.js, styles.css)
-├── tests/                  Pytest suite — no network, no API keys needed
-├── docs/ARCHITECTURE.md    Pipeline diagram, design decisions, trust boundaries
-├── .github/workflows/ci.yml  Lint (ruff) + tests on every push
-├── requirements.txt        Pinned runtime dependencies
-└── requirements-dev.txt    + pytest, httpx, ruff
+├── backend/                    Everything Python (FastAPI)
+│   ├── app/
+│   │   ├── main.py             App entrypoint: wiring, middleware, frontend mount
+│   │   ├── api/routes.py       HTTP endpoints (/extract-quote, /generate-presentation, …)
+│   │   ├── core/               config.py (settings) · errors.py (client-safe → HTTP)
+│   │   ├── models/             schemas.py (strict LLM schema) · presentation.py
+│   │   ├── services/           pipeline.py · verification.py · presentation.py · library.py
+│   │   ├── extraction/         detector · pymupdf · azure · docling · excel · base
+│   │   └── llm/                router · prompt · openai_extractor · anthropic_extractor
+│   ├── config/                 CONFIGURATION, not code (BRD 2.4) — edits need no release
+│   │   ├── insurers.json       Standing insurer list, aliases, debt-collection rule
+│   │   └── terminology.json    Mapping library: insurer wordings per comparison row
+│   ├── tests/                  Pytest suite — no network, no API keys needed
+│   ├── requirements*.txt       Pinned runtime / dev / optional-OCR dependencies
+│   └── pyproject.toml          Ruff + pytest configuration
+├── frontend/                   Zero Python — the broker SPA
+│   ├── index.html
+│   ├── css/styles.css          Wireframe theme tokens
+│   └── js/                     ES modules: constants · state · views · api · demo · main
+├── docs/ARCHITECTURE.md        Pipeline diagram, design decisions, trust boundaries
+├── .github/workflows/ci.yml    Lint (ruff) + tests on every push
+└── .env(.example)              Secrets at the repo root, shared by any run directory
 ```
 
 ## Quick start
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate          # Windows  (Linux/mac: source .venv/bin/activate)
-pip install -r requirements.txt
-copy .env.example .env          # fill in OPENAI_API_KEY, AZURE_ENDPOINT, AZURE_KEY
-uvicorn app.main:app --reload
+.venv\Scripts\activate               # Windows  (Linux/mac: source .venv/bin/activate)
+pip install -r backend/requirements.txt
+copy .env.example .env               # fill in ANTHROPIC_API_KEY (or OPENAI_API_KEY), AZURE_*
+uvicorn app.main:app --app-dir backend --reload
 ```
 
 - App: http://127.0.0.1:8000/
@@ -110,12 +109,12 @@ the file's bytes, not its name); each worksheet counts as one source page.
 2. **Source linking** — every value carries its 1-based PDF page; out-of-range
    citations are stripped by a post-validation pass.
 3. **Normalization via the mapping library** — insurer wordings map onto the
-   brokerage's row labels using [config/terminology.json](config/terminology.json)
+   brokerage's row labels using [backend/config/terminology.json](backend/config/terminology.json)
    (the client-compiled library; extend it without a release), **except**
    `excess_type`, which keeps the insurer's original wording.
 4. **Set fields, never extracted** — "Type of policy" is broker-selected at
    setup; "Debt collection support" is set by the insurer rule in
-   [config/insurers.json](config/insurers.json) (Allianz/Atradius/Coface →
+   [backend/config/insurers.json](backend/config/insurers.json) (Allianz/Atradius/Coface →
    Included, everyone else → Outsourced) and returned in `set_fields`. Both
    are absent from the extraction schema entirely and editable per column.
 5. **Review flags** — every value carries a `confidence` (`high`/`uncertain`);
@@ -128,8 +127,9 @@ the file's bytes, not its name); each worksheet counts as one source page.
 ## Development
 
 ```bash
+cd backend
 pip install -r requirements-dev.txt
-pytest        # 16 tests, no API keys or network needed
+pytest        # 72 tests, no API keys or network needed
 ruff check .  # lint (style, imports, bugbear, security rules)
 ```
 
@@ -169,7 +169,7 @@ records which provider/model produced it.
 
 ## Accuracy: the verification pass
 
-After the LLM extracts, [verification.py](app/services/verification.py)
+After the LLM extracts, [verification.py](backend/app/services/verification.py)
 deterministically checks **every value against the actual document text** —
 verbatim first, then per-figure digit matching so "GBP 12,600" verifies
 against a printed "£12,600.00". Wrong page citations are corrected, missing

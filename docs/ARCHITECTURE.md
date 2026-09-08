@@ -7,40 +7,40 @@ Aligned to BRD v1.2 (Upload → Extraction → Review → Compare → Export).
 ```
 POST /extract-quote (PDF or .xlsx upload, ≤25 MB, ≤60 pages)
         │
-        ├─ .xlsx ──► app/extraction/excel_extractor.py
+        ├─ .xlsx ──► backend/app/extraction/excel_extractor.py
         │            credit-limit schedules: one worksheet = one "page",
         │            rows rendered as explicit pipe-separated grids
         │
         ▼ (.pdf)
- app/extraction/detector.py
+ backend/app/extraction/detector.py
    PyMuPDF text-layer probe: count extractable chars per page.
    ≥40% low-text pages → SCANNED, else DIGITAL (both tunable via .env)
         │
-        ├─ DIGITAL ──► app/extraction/pymupdf_extractor.py
+        ├─ DIGITAL ──► backend/app/extraction/pymupdf_extractor.py
         │              position-sorted text blocks per page
         │
-        └─ SCANNED ──► app/extraction/azure_extractor.py
+        └─ SCANNED ──► backend/app/extraction/azure_extractor.py
                        Azure Document Intelligence prebuilt-layout:
                        lines + tables rebuilt as markdown grids
         │
         ▼
- app/extraction/base.py
+ backend/app/extraction/base.py
    pages joined with "=== PAGE n ===" markers — the LLM's only
    source of page numbers (this is what makes source-linking honest)
         │
         ▼
- app/llm/openai_extractor.py
-   OpenAI Responses API, temperature 0, strict Structured Outputs
-   compiled from the Pydantic model in app/models/schemas.py.
+ backend/app/llm/router.py -> openai_extractor / anthropic_extractor
+   Claude or OpenAI structured outputs, temperature 0, one shared prompt
+   compiled from the Pydantic model in backend/app/models/schemas.py.
    The prompt's terminology section is BUILT AT REQUEST TIME from the
-   mapping library (config/terminology.json, BRD 2.3) and the standing
-   insurer list (config/insurers.json)
+   mapping library (backend/config/terminology.json, BRD 2.3) and the standing
+   insurer list (backend/config/insurers.json)
         │
         ▼
- app/services/pipeline.py :: _sanitize + verification + review + set fields
+ backend/app/services/pipeline.py :: _sanitize + verification + review + set fields
    1) sanitize: out-of-range page cites cleared, confidence made
       consistent
-   2) app/services/verification.py: EVERY value is checked against the
+   2) backend/app/services/verification.py: EVERY value is checked against the
       actual document text — verbatim match first, then per-figure digit
       runs so "GBP 12,600" matches a printed "£12,600.00". Wrong page
       cites are corrected, dropped ones recovered, and a value found
@@ -56,8 +56,8 @@ POST /extract-quote (PDF or .xlsx upload, ≤25 MB, ≤60 pages)
 
 ## Configuration, not code (BRD 2.4)
 
-`config/insurers.json` (standing list, aliases, debt-collection rule) and
-`config/terminology.json` (the client-compiled mapping library) are re-read
+`backend/config/insurers.json` (standing list, aliases, debt-collection rule) and
+`backend/config/terminology.json` (the client-compiled mapping library) are re-read
 whenever the file changes on disk — adding an insurer, moving one between
 Included and Outsourced, or extending the terminology never requires a
 release or even a restart. `GET /insurers` serves the list to the frontend.

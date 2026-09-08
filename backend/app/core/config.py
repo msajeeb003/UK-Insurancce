@@ -13,10 +13,15 @@ logging, or error messages — use `.get_secret_value()` at the call site.
 """
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# .env lives at the repository root (one level above backend/), so the same
+# file works no matter which directory the server or tests are run from.
+ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
 
 
 class Settings(BaseSettings):
@@ -57,7 +62,7 @@ class Settings(BaseSettings):
     rate_limit_per_minute: int = 30
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
