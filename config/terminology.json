@@ -66,14 +66,15 @@
     ],
     "company_number": [
       "Company registration number", "Company No.", "Companies House Number",
-      "Registration Number"
+      "Registration Number", "Co. Reg. No."
     ],
     "limit_required": [
-      "Application Amount", "Limit Requested", "Limit Required", "Amount Applied For"
+      "Application Amount", "Limit Requested", "Limit Required",
+      "Amount Applied For", "Requested Credit Limit"
     ],
     "limit_offered": [
       "Amount Agreed", "Limit Approved", "Limit Granted", "Limit Offered",
-      "Credit Limit Decision"
+      "Credit Limit Decision", "Approved Credit Limit"
     ]
   }
 }

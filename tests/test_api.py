@@ -55,13 +55,31 @@ def test_rejects_unsupported_type(client):
     assert res.status_code == 415
 
 
-def test_legacy_xls_rejected_with_guidance(client):
+def test_legacy_xls_accepted_and_extracted(client, sample_extraction, monkeypatch):
+    from tests.conftest import make_xls
+
+    sample_extraction.document_type = "credit_limit_schedule"
+    monkeypatch.setattr(
+        pipeline_mod, "extract_quote_fields", lambda text: sample_extraction
+    )
+    data = make_xls({"Limits": [["Customer", "Approved Credit Limit"],
+                                ["On Tower UK Ltd", 1000]]})
     res = client.post(
         "/extract-quote",
-        files={"file": ("limits.xls", b"\xd0\xcf\x11\xe0", "application/vnd.ms-excel")},
+        files={"file": ("precheck.xls", data, "application/vnd.ms-excel")},
     )
-    assert res.status_code == 415
-    assert ".xlsx" in res.json()["detail"]
+    assert res.status_code == 200
+    assert res.json()["meta"]["extraction_engine"] == "excel"
+
+
+def test_corrupt_xls_is_422_not_415(client):
+    res = client.post(
+        "/extract-quote",
+        files={"file": ("limits.xls", b"\xd0\xcf\x11\xe0" + b"\x00" * 64,
+                        "application/vnd.ms-excel")},
+    )
+    assert res.status_code == 422
+    assert "legacy Excel" in res.json()["detail"]
 
 
 def test_rejects_empty_file(client):

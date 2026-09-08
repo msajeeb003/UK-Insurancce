@@ -18,7 +18,8 @@
     { "id": "chubb",    "name": "Chubb",            "debt_collection": "outsourced" },
     { "id": "markel",   "name": "Markel",           "debt_collection": "outsourced" },
     { "id": "nexus",    "name": "Nexus",            "debt_collection": "outsourced" },
-    { "id": "aviva",    "name": "Aviva",            "debt_collection": "outsourced" }
+    { "id": "aviva",    "name": "Aviva",            "debt_collection": "outsourced" },
+    { "id": "zurich",   "name": "Zurich",           "debt_collection": "outsourced" }
   ],
   "aliases": {
     "_comment": "Extra names an insurer may use in its documents, mapped to the id above.",
@@ -31,6 +32,7 @@
     "chubb": ["Chubb"],
     "markel": ["Markel", "Markel International"],
     "nexus": ["Nexus", "Nexus Trade Credit"],
-    "aviva": ["Aviva"]
+    "aviva": ["Aviva"],
+    "zurich": ["Zurich", "Zurich Insurance"]
   }
 }

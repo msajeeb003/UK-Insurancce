@@ -35,6 +35,21 @@ def make_xlsx(sheets: dict[str, list[list]]) -> bytes:
     return buffer.getvalue()
 
 
+def make_xls(sheets: dict[str, list[list]]) -> bytes:
+    """Build a LEGACY .xls (OLE2) workbook — real insurers still send these."""
+    import xlwt
+
+    workbook = xlwt.Workbook()
+    for title, rows in sheets.items():
+        sheet = workbook.add_sheet(title)
+        for r, row in enumerate(rows):
+            for c, value in enumerate(row):
+                sheet.write(r, c, value)
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
 DIGITAL_PAGE = [
     "ACME Credit Insurance plc — Quotation",
     "Insurable Turnover: GBP 12,000,000 for the forthcoming policy period.",

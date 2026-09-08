@@ -34,6 +34,7 @@ _READ_CHUNK = 1024 * 1024  # 1 MB
 EXCEL_CONTENT_TYPES = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.ms-excel.sheet.macroEnabled.12",
+    "application/vnd.ms-excel",  # legacy .xls
 }
 
 
@@ -128,16 +129,11 @@ def _resolve_file_kind(filename: str, content_type: str | None) -> FileKind:
     lowered = filename.lower()
     if lowered.endswith(".pdf") or content_type == "application/pdf":
         return "pdf"
-    if lowered.endswith((".xlsx", ".xlsm")) or content_type in EXCEL_CONTENT_TYPES:
+    if (
+        lowered.endswith((".xlsx", ".xlsm", ".xls"))
+        or content_type in EXCEL_CONTENT_TYPES
+    ):
         return "excel"
-    if lowered.endswith(".xls"):
-        raise HTTPException(
-            status_code=415,
-            detail=(
-                "Legacy .xls workbooks are not supported — re-save the "
-                "schedule as .xlsx and upload again."
-            ),
-        )
     raise HTTPException(
         status_code=415,
         detail=(

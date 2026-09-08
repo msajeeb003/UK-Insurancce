@@ -100,8 +100,9 @@ indemnity, excess, excess type (insurer's own wording), max annual
 liability, discretionary limit, max terms of payment, max extension period,
 additional info. The two set fields never appear inside `data` — debt
 collection arrives in `set_fields` from the insurer rule; type of policy is
-chosen at project setup in the UI. Excel (`.xlsx`) credit-limit schedules
-are accepted alongside PDFs; each worksheet counts as one source page.
+chosen at project setup in the UI. Excel credit-limit schedules are accepted
+alongside PDFs — both modern `.xlsx` and legacy `.xls` (format detected from
+the file's bytes, not its name); each worksheet counts as one source page.
 
 ## Extraction rules
 
