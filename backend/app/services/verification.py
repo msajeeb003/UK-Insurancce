@@ -75,6 +75,12 @@ class _PageIndex:
         needle = _normalize(value)
         if len(needle) >= 3 and needle in page_text:
             return True
+        # Very short values ("0" in a real QBE country table) can't use
+        # substring or digit-run matching — require a standalone token.
+        if 0 < len(needle) < 3:
+            return bool(re.search(
+                rf"(?<![\w\d]){re.escape(needle)}(?![\w\d.%])", page_text
+            ))
         runs = _digit_runs(value)
         page_runs = self.digit_runs.get(page_number, set())
         return bool(runs) and all(self._run_matches(run, page_runs) for run in runs)

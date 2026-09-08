@@ -61,13 +61,18 @@ def extract_with_anthropic(tagged_document_text: str) -> QuoteExtraction:
     settings = get_settings()
     client = _get_client()
 
+    # Sampling params were removed on Claude Sonnet 5 / Opus 4.6+ (a 400 if
+    # sent); Haiku 4.5 still accepts temperature, where 0 aids determinism.
+    extra = (
+        {"temperature": 0}
+        if settings.anthropic_model.startswith("claude-haiku")
+        else {}
+    )
     try:
         response = client.messages.parse(
             model=settings.anthropic_model,
             max_tokens=MAX_OUTPUT_TOKENS,
-            # parse() exposes no temperature parameter; inject it for
-            # deterministic extraction via the SDK's body escape hatch.
-            extra_body={"temperature": 0},
+            extra_body=extra,
             system=build_system_prompt(),
             messages=[
                 {"role": "user", "content": build_user_message(tagged_document_text)}

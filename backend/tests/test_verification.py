@@ -73,6 +73,32 @@ def test_digits_of_one_figure_do_not_verify_inside_another(sample_extraction):
     assert "excess" in unverified
 
 
+def test_short_standalone_value_verifies():
+    """A real QBE quote lists Discretionary Credit Limit as a bare '0' in a
+    country table — a standalone token must verify; digits inside other
+    figures must not."""
+    from app.models.schemas import QuoteExtraction
+
+    pages = [PageText(1, "ANDORRA\n0\n90%\n45 days"), PageText(2, "GBP 1,000,000")]
+    base = {name: sv(None, None) for name in [
+        "insurer", "annual_turnover", "premium_rate",
+        "estimated_annual_premium_exc_ipt", "minimum_annual_premium",
+        "credit_limit_charges", "indemnity", "excess", "excess_type",
+        "max_annual_liability", "max_terms_of_payment",
+        "max_extension_period", "additional_info",
+    ]}
+    ex = QuoteExtraction(document_type="insurer_quote",
+                         discretionary_limit=sv("0", 1),
+                         buyer_credit_limits=[], **base)
+    assert verify_extraction(ex, pages) == []
+    assert ex.discretionary_limit.page == 1
+
+    ex2 = QuoteExtraction(document_type="insurer_quote",
+                          discretionary_limit=sv("7", 2),  # only inside 1,000,000? no 7 at all
+                          buyer_credit_limits=[], **base)
+    assert "discretionary_limit" in verify_extraction(ex2, pages)
+
+
 def test_summary_fields_are_exempt(sample_extraction):
     ex = make_extraction(
         sample_extraction,
