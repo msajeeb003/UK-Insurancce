@@ -1,17 +1,8 @@
 """Hardening: rate limiting, payload caps, header safety, CSP."""
 
-import pytest
-from fastapi.testclient import TestClient
-
 import app.main as main_mod
 from app.core.config import get_settings
-from app.main import app
 from tests.test_presentation import make_request
-
-
-@pytest.fixture
-def client() -> TestClient:
-    return TestClient(app)
 
 
 def test_rate_limit_kicks_in(client, monkeypatch):

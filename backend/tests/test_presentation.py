@@ -161,11 +161,7 @@ def test_limits_xlsx_refused_when_empty():
 
 # ── API endpoint ─────────────────────────────────────────────────────────
 
-def test_endpoint_gate_and_download_headers():
-    from fastapi.testclient import TestClient
-
-    from app.main import app
-    client = TestClient(app)
+def test_endpoint_gate_and_download_headers(client):
     payload = make_request().model_dump()
 
     blocked = dict(payload, confirmed_fields=[])

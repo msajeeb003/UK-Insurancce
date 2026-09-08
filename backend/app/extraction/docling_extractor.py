@@ -1,23 +1,13 @@
 """
-Open-source OCR extraction with IBM Docling (BRD 2.2 scanned-PDF route).
+Open-source scanned-PDF OCR via IBM Docling (BRD 2.2) — the zero-cloud-cost
+fallback when Azure is not configured. Chosen over Tesseract/EasyOCR/
+PaddleOCR because it is the only pip-only option that reconstructs TABLE
+STRUCTURE, which buyer credit-limit schedules depend on.
 
-Used for scanned PDFs when Azure Document Intelligence is NOT configured —
-Azure remains the preferred engine when its keys exist, and this module is
-the zero-cloud-cost fallback so the pilot can process scans today. Chosen
-over Tesseract/EasyOCR/PaddleOCR because Docling is the only pip-only
-option that reconstructs TABLE STRUCTURE, which buyer credit-limit
-schedules depend on.
-
-Output is the same `list[PageText]` shape as every other extractor: per
-page, the recognized text in reading order, then each table on that page
-rebuilt as a markdown grid — so the LLM step is engine-agnostic and the
-source-link contract (1-based pages) is identical.
-
-Docling is an OPTIONAL heavy dependency (it pulls PyTorch). Install with:
+Docling is an OPTIONAL heavy dependency (PyTorch):
     pip install -r requirements-ocr.txt
-The first conversion downloads layout/OCR models (~a few hundred MB) and
-runs noticeably slower than later ones. Everything is imported lazily so
-the app runs fine without Docling installed.
+Imports are lazy so the app runs fine without it; the first conversion
+downloads models and is slow.
 """
 
 import io
@@ -26,7 +16,7 @@ from collections import defaultdict
 from functools import lru_cache
 
 from app.core.errors import ConfigurationError, InvalidDocumentError
-from app.extraction.base import PageText, clean_text
+from app.extraction.base import PageText, build_ocr_pages
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +49,7 @@ def _get_converter():
 
 
 def _table_markdown(table, document) -> str:
-    """Version-tolerant table -> markdown (the doc argument arrived in 2.x)."""
+    """Version-tolerant table export (the doc argument arrived in 2.x)."""
     try:
         return table.export_to_markdown(doc=document)
     except TypeError:
@@ -68,17 +58,11 @@ def _table_markdown(table, document) -> str:
 
 def _item_page(item) -> int | None:
     prov = getattr(item, "prov", None)
-    if prov:
-        return prov[0].page_no
-    return None
+    return prov[0].page_no if prov else None
 
 
 def extract_pages_docling(pdf_bytes: bytes) -> list[PageText]:
-    """
-    OCR a scanned PDF with Docling and return per-page text + table grids.
-
-    Blocking, CPU-heavy call — the pipeline runs it in a worker thread.
-    """
+    """Blocking, CPU-heavy call — the pipeline runs it in a worker thread."""
     from docling.datamodel.base_models import DocumentStream
 
     converter = _get_converter()
@@ -94,7 +78,6 @@ def extract_pages_docling(pdf_bytes: bytes) -> list[PageText]:
             "higher quality, or configure Azure Document Intelligence."
         ) from exc
 
-    # ── Text items per page, in Docling's reading order ──────────────────
     lines_by_page: dict[int, list[str]] = defaultdict(list)
     for item in document.texts:
         page_no = _item_page(item)
@@ -102,24 +85,13 @@ def extract_pages_docling(pdf_bytes: bytes) -> list[PageText]:
         if page_no and text:
             lines_by_page[page_no].append(text)
 
-    # ── Tables per page, as markdown grids ───────────────────────────────
     tables_by_page: dict[int, list[str]] = defaultdict(list)
     for table in document.tables:
         page_no = _item_page(table)
         if page_no:
             tables_by_page[page_no].append(_table_markdown(table, document))
 
-    pages: list[PageText] = []
-    for page_no in sorted(set(lines_by_page) | set(tables_by_page)):
-        sections = ["\n".join(lines_by_page.get(page_no, []))]
-        for i, table_md in enumerate(tables_by_page.get(page_no, []), start=1):
-            sections.append(f"[TABLE {i} ON THIS PAGE]\n{table_md}")
-        pages.append(
-            PageText(page_number=page_no, text=clean_text("\n\n".join(sections)))
-        )
-
-    logger.info(
-        "Docling extracted %d pages, %d tables",
-        len(pages), len(document.tables),
-    )
+    pages = build_ocr_pages(lines_by_page, tables_by_page)
+    logger.info("Docling extracted %d pages, %d tables",
+                len(pages), len(document.tables))
     return pages

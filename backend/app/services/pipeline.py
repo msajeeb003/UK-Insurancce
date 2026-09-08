@@ -1,14 +1,10 @@
 """
 Pipeline orchestrator: document bytes -> page-tagged text -> LLM ->
-sanitized, rule-annotated `ExtractionResponse` (BRD 2.2).
+sanitized, verified, rule-annotated `ExtractionResponse` (BRD 2.2).
 
-Routing:
-  - .pdf   -> PyMuPDF text-layer probe; scanned PDFs go to Azure Document
-              Intelligence when configured, else open-source Docling OCR
-  - .xlsx  -> worksheet extractor (credit-limit schedules, BRD 2.2/2.6)
-
-Kept free of FastAPI imports so it can be unit-tested (and later reused by
-a batch worker) without spinning up the web layer.
+Routing: .pdf -> PyMuPDF, or OCR when scanned (Azure if configured, else
+Docling); .xlsx/.xls -> worksheet extractor. FastAPI-free so it can be
+unit-tested or reused by a batch worker.
 """
 
 import asyncio
@@ -31,7 +27,7 @@ from app.models.schemas import (
     ReviewSummary,
     SetField,
     SetFields,
-    SourcedValue,
+    sourced_items,
 )
 from app.services.library import debt_collection_rule
 from app.services.verification import verify_extraction
@@ -42,35 +38,20 @@ EngineOverride = Literal["auto", "digital", "azure", "docling"]
 FileKind = Literal["pdf", "excel"]
 
 
-def _sourced_fields(extraction: QuoteExtraction) -> list[tuple[str, SourcedValue]]:
-    """(field_name, SourcedValue) pairs, in schema order."""
-    return [
-        (name, item)
-        for name in type(extraction).model_fields
-        if isinstance(item := getattr(extraction, name), SourcedValue)
-    ]
-
-
 def _sanitize(extraction: QuoteExtraction, page_count: int) -> QuoteExtraction:
     """
-    Defensive pass over the LLM output:
-    - a cited page outside the document's range is nulled (value kept);
-    - a null value must not carry a page or a confidence;
-    - a non-null value with no confidence defaults to 'high' (unflagged).
-    Structured Outputs makes schema violations impossible, but semantic
-    slips (hallucinated pages, inconsistent confidence) are still possible —
-    this keeps source links and review flags trustworthy for the broker UI.
+    Defensive pass over the LLM output: out-of-range page cites cleared
+    (values kept), null values carry no page/confidence, unflagged values
+    default to 'high'. Keeps source links and review flags trustworthy.
     """
-    for field_name, item in _sourced_fields(extraction):
+    for field_name, item in sourced_items(extraction):
         if item.value is None:
             item.page = None
             item.confidence = None
             continue
         if item.page is not None and not (1 <= item.page <= page_count):
-            logger.warning(
-                "Field %r cited out-of-range page %s (doc has %d pages) — "
-                "clearing page link", field_name, item.page, page_count,
-            )
+            logger.warning("Field %r cited out-of-range page %s — clearing link",
+                           field_name, item.page)
             item.page = None
         if item.confidence is None:
             item.confidence = "high"
@@ -82,30 +63,19 @@ def _sanitize(extraction: QuoteExtraction, page_count: int) -> QuoteExtraction:
     return extraction
 
 
-def _build_review(
-    extraction: QuoteExtraction, unverified: list[str]
-) -> ReviewSummary:
-    """
-    Deterministic review summary for the UI / export gate — computed from
-    the sanitized, verified extraction, never asked of the LLM.
-    """
-    missing = [name for name, item in _sourced_fields(extraction) if item.value is None]
-    uncertain = [
-        name for name, item in _sourced_fields(extraction)
-        if item.confidence == "uncertain"
-    ]
+def _build_review(extraction: QuoteExtraction, unverified: list[str]) -> ReviewSummary:
+    """Deterministic review summary — computed server-side, never by the LLM."""
     return ReviewSummary(
-        missing_fields=missing,
-        uncertain_fields=uncertain,
+        missing_fields=[n for n, i in sourced_items(extraction) if i.value is None],
+        uncertain_fields=[n for n, i in sourced_items(extraction)
+                          if i.confidence == "uncertain"],
         unverified_fields=unverified,
     )
 
 
 def _build_set_fields(extraction: QuoteExtraction) -> SetFields:
-    """
-    BRD 2.4: debt collection support is set by the insurer rule in
-    config/insurers.json — never extracted. Editable per column in the UI.
-    """
+    """BRD 2.4: debt collection support is SET by the insurer rule
+    (backend/config/insurers.json), never extracted."""
     value, matched = debt_collection_rule(extraction.insurer.value)
     return SetFields(
         debt_collection_support=SetField(
@@ -115,11 +85,8 @@ def _build_set_fields(extraction: QuoteExtraction) -> SetFields:
 
 
 def _scanned_engine(override: EngineOverride) -> str:
-    """
-    BRD 2.2 scanned-PDF routing: Azure Document Intelligence when its keys
-    are configured, otherwise the open-source Docling OCR. An explicit
-    engine override always wins.
-    """
+    """Scanned routing: explicit override wins; else Azure when configured,
+    else the open-source Docling engine."""
     if override in ("azure", "docling"):
         return override
     settings = get_settings()
@@ -131,9 +98,7 @@ def _scanned_engine(override: EngineOverride) -> str:
 async def _extract_pdf_pages(
     pdf_bytes: bytes, engine: EngineOverride
 ) -> tuple[list[PageText], int, str]:
-    """PDF branch: classify, then PyMuPDF / Azure / Docling. Returns
-    (pages, count, engine)."""
-    doc = open_pdf(pdf_bytes)  # raises InvalidDocumentError on bad input
+    doc = open_pdf(pdf_bytes)
     try:
         page_count = doc.page_count
         if engine == "auto":
@@ -160,18 +125,8 @@ async def run_extraction_pipeline(
     engine: EngineOverride = "auto",
     file_kind: FileKind = "pdf",
 ) -> ExtractionResponse:
-    """
-    Full extraction flow for one uploaded document.
-
-    `engine` (PDF only):
-      - "auto"    detect digital vs scanned (default)
-      - "digital" force PyMuPDF
-      - "azure"   force Azure DI (e.g. digital PDFs with brutal tables)
-      - "docling" force the open-source OCR
-
-    Raises `PipelineError` subclasses; the API layer maps them to HTTP.
-    """
-    # ── 1. Extract page-tagged text ──────────────────────────────────────
+    """Full extraction flow for one uploaded document. Raises
+    `PipelineError` subclasses; the API layer maps them to HTTP."""
     if file_kind == "excel":
         pages = await asyncio.to_thread(extract_pages_excel, file_bytes)
         page_count, engine_used = len(pages), "excel"
@@ -183,12 +138,11 @@ async def run_extraction_pipeline(
             f"No text could be extracted from this document with the "
             f"'{engine_used}' engine."
         )
-    tagged_text = to_tagged_document(pages)
 
-    # ── 2. LLM structured extraction (blocking SDK call -> thread) ───────
-    extraction = await asyncio.to_thread(extract_quote_fields, tagged_text)
+    extraction = await asyncio.to_thread(
+        extract_quote_fields, to_tagged_document(pages)
+    )
 
-    # ── 3. Sanitize, then VERIFY every value against the document ────────
     extraction = _sanitize(extraction, page_count)
     unverified = verify_extraction(extraction, pages)
 

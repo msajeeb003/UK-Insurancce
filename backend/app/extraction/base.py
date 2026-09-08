@@ -1,10 +1,7 @@
 """
-Shared types for the text-extraction layer.
-
-Both extractors (PyMuPDF and Azure) produce the same intermediate shape —
-a list of `PageText` — so the LLM step is completely agnostic about which
-engine ran. Page numbers are 1-based throughout the pipeline, matching what
-a broker sees in a PDF viewer.
+Shared types for the text-extraction layer. Every extractor (PyMuPDF,
+Azure, Docling, Excel) produces the same `list[PageText]`, so the LLM step
+is engine-agnostic. Page numbers are 1-based, matching a PDF viewer.
 """
 
 from dataclasses import dataclass
@@ -17,14 +14,13 @@ class PageText:
 
 
 # Some PDFs carry a mojibake text layer (UTF-8 bytes decoded as Latin-1 by
-# whatever produced the PDF): "£" arrives as "Â£", curly quotes as "â€™",
-# and so on. Seen in a real insurer indication during the pilot. Cleaning at
-# extraction time keeps the LLM input, the verification pass, and the
-# broker-facing values consistent.
+# whatever produced the PDF) — seen in a real insurer indication during the
+# pilot. Cleaning at extraction time keeps the LLM input, the verification
+# pass, and the broker-facing values consistent.
 _MOJIBAKE_MAP = {
     "Â£": "£", "Â·": "·", "Â°": "°", "Â®": "®",
     "â€™": "'", "â€˜": "'", "â€œ": '"', "â€\x9d": '"',
-    "â€“": "–", "â€”": "—", "â€¦": "…", "Ã©": "é",
+    "â€“": "–", "â€”": "—", "â€¦": "...", "Ã©": "é",
 }
 
 
@@ -38,13 +34,32 @@ def clean_text(text: str) -> str:
 
 def to_tagged_document(pages: list[PageText]) -> str:
     """
-    Join page texts into a single LLM input string with explicit page markers.
-
-    The markers are the ONLY way the LLM can know page numbers, which is what
-    makes the source-linking rule (page per field) reliable.
+    Join page texts with explicit "=== PAGE n ===" markers — the LLM's only
+    source of page numbers, which is what makes source-linking reliable.
     """
     parts = []
     for page in pages:
         parts.append(f"=== PAGE {page.page_number} ===")
         parts.append(page.text.strip())
     return "\n".join(parts)
+
+
+def build_ocr_pages(
+    lines_by_page: dict[int, list[str]],
+    tables_by_page: dict[int, list[str]],
+) -> list[PageText]:
+    """
+    Assemble OCR output (recognized lines + rebuilt table grids, keyed by
+    page number) into PageText — shared by the Azure and Docling engines.
+    Tables are appended explicitly because a clean row/column grid is far
+    more reliable for the LLM than the same cells scattered through lines.
+    """
+    pages: list[PageText] = []
+    for page_no in sorted(set(lines_by_page) | set(tables_by_page)):
+        sections = ["\n".join(lines_by_page.get(page_no, []))]
+        for i, table_md in enumerate(tables_by_page.get(page_no, []), start=1):
+            sections.append(f"[TABLE {i} ON THIS PAGE]\n{table_md}")
+        pages.append(
+            PageText(page_number=page_no, text=clean_text("\n\n".join(sections)))
+        )
+    return pages

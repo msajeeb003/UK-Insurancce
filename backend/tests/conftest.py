@@ -6,8 +6,15 @@ import io
 import openpyxl
 import pymupdf
 import pytest
+from fastapi.testclient import TestClient
 
 from app.models.schemas import BuyerCreditLimit, QuoteExtraction, SourcedValue
+
+
+@pytest.fixture
+def client() -> TestClient:
+    from app.main import app
+    return TestClient(app)
 
 
 def make_pdf(pages: list[list[str]]) -> bytes:

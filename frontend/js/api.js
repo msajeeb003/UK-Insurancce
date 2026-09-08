@@ -51,6 +51,12 @@ function kindLabel(kind) {
   return kind === 'limits' ? 'credit-limit doc' : kind === 'expiring' ? 'expiring policy' : 'quote';
 }
 
+async function readDetail(res) {
+  let detail = 'HTTP ' + res.status;
+  try { detail = (await res.json()).detail || detail; } catch (e) {}
+  return detail;
+}
+
 /* ── Upload -> POST /extract-quote ───────────────────────────────────── */
 export async function uploadFiles(kind, fileList) {
   const p = proj(); if (!p) return;
@@ -94,11 +100,7 @@ export async function uploadFiles(kind, fileList) {
       const fd = new FormData();
       fd.append('file', f);
       const res = await fetch('/extract-quote', { method: 'POST', body: fd });
-      if (!res.ok) {
-        let detail = 'HTTP ' + res.status;
-        try { detail = (await res.json()).detail || detail; } catch (e) {}
-        throw new Error(detail);
-      }
+      if (!res.ok) throw new Error(await readDetail(res));
       const body = await res.json();
       applyExtraction(p, entry, body, kind);
     } catch (err) {
@@ -212,9 +214,7 @@ export async function downloadExport(format) {
       body: JSON.stringify(buildPresentationPayload(p)),
     });
     if (!res.ok) {
-      let detail = 'HTTP ' + res.status;
-      try { detail = (await res.json()).detail || detail; } catch (e) {}
-      alert('Export failed: ' + detail);
+      alert('Export failed: ' + await readDetail(res));
       return false;
     }
     const blob = await res.blob();

@@ -40,6 +40,25 @@ function confirmLabel(k) {
   return { premium: 'Premium', indemnity: 'Indemnity', excess: 'Excess', maxLiability: 'Max liability' }[k];
 }
 
+/* ── Shared fragments ────────────────────────────────────────────────── */
+function screenHeader(title, sub) {
+  return `
+    <h1 style="font-size:26px;margin:0 0 6px;font-weight:700;letter-spacing:-.4px">${title}</h1>
+    <p style="color:var(--ink2);font-size:13.5px;margin:0 0 24px">${sub}</p>`;
+}
+
+function navFooter(backScreen, nextLabel, nextScreen) {
+  return `
+    <div style="display:flex;justify-content:space-between;gap:10px;margin-top:22px">
+      <button class="btn btn-secondary" data-act="go" data-arg="${backScreen}">← Back</button>
+      <button class="btn btn-primary" data-act="go" data-arg="${nextScreen}">${nextLabel} →</button>
+    </div>`;
+}
+
+function removeX(colId, title) {
+  return `<span data-act="removeColumn" data-arg="${colId}" title="${title}" style="flex:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1">×</span>`;
+}
+
 /* ═══════════════════════════ RENDERERS ═════════════════════════════ */
 
 export function render() {
@@ -223,8 +242,7 @@ function renderSetup(p) {
     </div>`;
   return `
   <div>
-    <h1 style="font-size:26px;margin:0 0 6px;font-weight:700;letter-spacing:-.4px">New project</h1>
-    <p style="color:var(--ink2);font-size:13.5px;margin:0 0 26px">Set up the client and choose which insurers were approached.</p>
+    ${screenHeader('New project', 'Set up the client and choose which insurers were approached.')}
     <div style="display:grid;grid-template-columns:1.35fr 1fr;gap:20px;align-items:start">
       <div class="card" style="padding:26px">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px">
@@ -301,8 +319,7 @@ function renderUpload(p) {
 
   return `
   <div style="max-width:900px">
-    <h1 style="font-size:26px;margin:0 0 6px;font-weight:700;letter-spacing:-.4px">Upload documents</h1>
-    <p style="color:var(--ink2);font-size:13.5px;margin:0 0 24px">Add quotes as they arrive — uploads are cumulative and the comparison refreshes each time.</p>
+    ${screenHeader('Upload documents', 'Add quotes as they arrive — uploads are cumulative and the comparison refreshes each time.')}
     <input type="file" id="file-quote" accept="application/pdf" multiple hidden>
     <input type="file" id="file-limits" accept="application/pdf,.xlsx,.xls" multiple hidden>
     <input type="file" id="file-expiring" accept="application/pdf" hidden>
@@ -338,10 +355,7 @@ function renderUpload(p) {
       ${filesHtml}
     </div>
     <p style="font-size:12.5px;color:var(--ink2);margin:14px 2px 0">An unreadable document is flagged individually — the project continues with that insurer’s column blank.</p>
-    <div style="display:flex;justify-content:space-between;gap:10px;margin-top:22px">
-      <button class="btn btn-secondary" data-act="go" data-arg="setup">← Back</button>
-      <button class="btn btn-primary" data-act="go" data-arg="review">Review comparison →</button>
-    </div>
+    ${navFooter('setup', 'Review comparison', 'review')}
   </div>`;
 }
 
@@ -361,7 +375,7 @@ function renderReview(p) {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
         <input class="head-input" data-edit="colname" data-col="${col.id}" value="${esc(col.name)}" style="color:${isRec ? 'var(--accent)' : 'var(--ink)'}">
         <div style="display:flex;align-items:center;gap:6px;flex:none">
-          <span data-act="removeColumn" data-arg="${col.id}" title="${col.manual ? 'Remove column' : 'Remove this column and its uploaded file (re-upload to restore)'}" style="cursor:pointer;color:var(--ink3);font-size:15px;line-height:1">×</span>
+          ${removeX(col.id, col.manual ? 'Remove column' : 'Remove this column and its uploaded file (re-upload to restore)')}
           <span data-act="pickRec" data-arg="${col.id}" class="mono" style="font-size:10px;font-weight:500;padding:3px 7px;border-radius:5px;cursor:pointer;background:${isRec ? 'var(--accent)' : '#fff'};color:${isRec ? '#fff' : 'var(--ink3)'};border:1px solid ${isRec ? 'var(--accent)' : 'var(--line)'}">${isRec ? '★ REC' : 'Set rec'}</span>
         </div>
       </div>
@@ -431,10 +445,7 @@ function renderReview(p) {
       <label style="display:block;font-size:12.5px;font-weight:600;color:var(--ink2);margin-bottom:8px">Free-format notes <span style="color:var(--ink3);font-weight:400">— appears beneath the comparison</span></label>
       <textarea class="textarea" data-edit="notes" style="min-height:64px;line-height:1.5">${esc(p.notes)}</textarea>
     </div>
-    <div style="display:flex;justify-content:space-between;gap:10px;margin-top:22px">
-      <button class="btn btn-secondary" data-act="go" data-arg="upload">← Back</button>
-      <button class="btn btn-primary" data-act="go" data-arg="limits">Credit limits →</button>
-    </div>
+    ${navFooter('upload', 'Credit limits', 'limits')}
   </div>`;
 }
 
@@ -475,7 +486,7 @@ function renderLimits(p) {
             return `<th style="text-align:left;padding:12px 14px;min-width:130px;background:${isRec ? 'var(--rec)' : 'var(--panel)'};border-bottom:1px solid var(--line);border-left:1px solid var(--line2)">
               <div style="display:flex;align-items:center;gap:7px">
                 <span style="font-size:13px;font-weight:600;color:${isRec ? 'var(--accent)' : 'var(--ink)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(col.name)}</span>
-                <span data-act="removeColumn" data-arg="${col.id}" title="Remove this column (also removes it from the comparison)" style="flex:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1">×</span>
+                ${removeX(col.id, 'Remove this column (also removes it from the comparison)')}
               </div>
               ${col.manual ? `<span class="mono" style="display:inline-block;margin-top:4px;font-size:9px;font-weight:500;color:var(--warn);background:var(--warn-soft);padding:2px 6px;border-radius:4px">FREE FORMAT</span>` : ''}
             </th>`;
@@ -486,10 +497,7 @@ function renderLimits(p) {
       </table>
     </div>
     <p style="font-size:12.5px;color:var(--ink2);margin:14px 2px 0">Around 90% of limits arrive as a separate schedule. This page is omitted cleanly from the presentation when no limits are supplied.</p>
-    <div style="display:flex;justify-content:space-between;gap:10px;margin-top:22px">
-      <button class="btn btn-secondary" data-act="go" data-arg="review">← Back</button>
-      <button class="btn btn-primary" data-act="go" data-arg="recommend">Recommendation →</button>
-    </div>
+    ${navFooter('review', 'Recommendation', 'recommend')}
   </div>`;
 }
 
@@ -513,8 +521,7 @@ function renderRecommend(p) {
   const recName = recCol ? recCol.name : '[select an insurer]';
   return `
   <div style="max-width:900px">
-    <h1 style="font-size:26px;margin:0 0 6px;font-weight:700;letter-spacing:-.4px">Comments &amp; recommendation</h1>
-    <p style="color:var(--ink2);font-size:13.5px;margin:0 0 24px">Standard wording is fixed. You choose the insurer — the system never ranks or suggests.</p>
+    ${screenHeader('Comments &amp; recommendation', 'Standard wording is fixed. You choose the insurer — the system never ranks or suggests.')}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
       ${cards || `<div style="grid-column:1/-1;padding:30px;text-align:center;color:var(--ink3);font-size:13.5px" class="card">No comparison columns yet — upload quotes first.</div>`}
     </div>
@@ -526,10 +533,7 @@ function renderRecommend(p) {
       <label style="display:block;font-size:12.5px;font-weight:600;color:var(--ink2);margin-bottom:8px">Reasons for the recommendation <span style="color:var(--ink3);font-weight:400">— free text</span></label>
       <textarea class="textarea" data-edit="reasons" style="min-height:90px" placeholder="e.g. Highest indemnity at a competitive rate, debt collection included, and the widest discretionary limit for the client’s buyer profile.">${esc(p.reasons)}</textarea>
     </div>
-    <div style="display:flex;justify-content:space-between;gap:10px;margin-top:22px">
-      <button class="btn btn-secondary" data-act="go" data-arg="limits">← Back</button>
-      <button class="btn btn-primary" data-act="go" data-arg="export">Generate &amp; export →</button>
-    </div>
+    ${navFooter('limits', 'Generate &amp; export', 'export')}
   </div>`;
 }
 

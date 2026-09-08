@@ -290,3 +290,12 @@ class ExtractionResponse(BaseModel):
     review: ReviewSummary
     set_fields: SetFields
     data: QuoteExtraction
+
+
+def sourced_items(extraction: QuoteExtraction) -> list[tuple[str, SourcedValue]]:
+    """(field_name, SourcedValue) pairs of an extraction, in schema order."""
+    return [
+        (name, item)
+        for name in QuoteExtraction.model_fields
+        if isinstance(item := getattr(extraction, name), SourcedValue)
+    ]

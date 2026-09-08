@@ -28,7 +28,7 @@ import logging
 import re
 
 from app.extraction.base import PageText
-from app.models.schemas import QuoteExtraction, SourcedValue
+from app.models.schemas import QuoteExtraction, sourced_items
 
 logger = logging.getLogger(__name__)
 
@@ -94,11 +94,8 @@ def verify_extraction(
     index = _PageIndex(pages)
     unverified: list[str] = []
 
-    for field_name in type(extraction).model_fields:
-        item = getattr(extraction, field_name)
-        if not isinstance(item, SourcedValue) or item.value is None:
-            continue
-        if field_name in SUMMARY_FIELDS:
+    for field_name, item in sourced_items(extraction):
+        if item.value is None or field_name in SUMMARY_FIELDS:
             continue
 
         if item.page is not None and index.value_on_page(item.value, item.page):

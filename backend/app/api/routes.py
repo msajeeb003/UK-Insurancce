@@ -68,6 +68,13 @@ async def insurers() -> dict:
     return {"insurers": get_insurers()}
 
 
+def _http_from_pipeline_error(exc: PipelineError, context: str) -> HTTPException:
+    """PipelineError messages are client-safe by contract; anything
+    sensitive was logged where the error was raised."""
+    logger.warning("%s: %s", context, exc)
+    return HTTPException(status_code=exc.status_code, detail=str(exc))
+
+
 ExportFormat = Literal["pptx", "pdf", "limits-xlsx"]
 
 _EXPORT_BUILDERS = {
@@ -107,8 +114,9 @@ async def generate_presentation(
     try:
         content = builder(request)
     except PipelineError as exc:
-        logger.warning("Export refused for %r: %s", request.client_name, exc)
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+        raise _http_from_pipeline_error(
+            exc, f"Export refused for {request.client_name!r}"
+        ) from exc
     except Exception as exc:
         logger.exception("Presentation generation failed for %r", request.client_name)
         raise HTTPException(
@@ -190,10 +198,9 @@ async def extract_quote(
     try:
         return await run_extraction_pipeline(file_bytes, filename, engine, file_kind)
     except PipelineError as exc:
-        # Message is client-safe by contract; anything sensitive was logged
-        # where the error was raised.
-        logger.warning("Extraction rejected for %s: %s", filename, exc)
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+        raise _http_from_pipeline_error(
+            exc, f"Extraction rejected for {filename}"
+        ) from exc
     except Exception as exc:
         # Unknown failure (SDK errors, bugs): opaque to the client.
         logger.exception("Unexpected extraction failure for %s", filename)

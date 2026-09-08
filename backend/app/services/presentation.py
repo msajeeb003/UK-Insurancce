@@ -124,6 +124,44 @@ def declined_insurers(req: PresentationRequest) -> list[str]:
     return declined
 
 
+# ── Shared content assembly — one source of truth for both renderers ────
+
+def _kicker(req: PresentationRequest) -> str:
+    return "RENEWAL" if req.project_type == "renewal" else "NEW BUSINESS"
+
+
+def _subtitle(req: PresentationRequest) -> str:
+    subtitle = f"{req.client_name} · {date.today().strftime('%B %Y')}"
+    return f"{subtitle} · {req.reference}" if req.reference else subtitle
+
+
+def _quoted_sentence(req: PresentationRequest) -> str:
+    names = [c.name for c in req.columns]
+    plural = "s" if len(names) != 1 else ""
+    return f"{', '.join(names)} — quotation{plural} obtained."
+
+
+def _declined_sentence(req: PresentationRequest) -> str | None:
+    declined = declined_insurers(req)
+    if not declined:
+        return None
+    verb = "was" if len(declined) == 1 else "were"
+    return f"{', '.join(declined)} {verb} approached but declined to quote."
+
+
+def _recommended_name(req: PresentationRequest) -> str:
+    col = next((c for c in req.columns if _is_rec(req, c)), None)
+    return col.name if col else "[no insurer selected]"
+
+
+def _is_rec(req: PresentationRequest, col) -> bool:
+    return col.id == req.recommended_id
+
+
+def _limits_headers(req: PresentationRequest) -> list[str]:
+    return ["Buyer", "Company no.", "Required"] + [c.name for c in req.columns]
+
+
 def suggested_filename(req: PresentationRequest, extension: str) -> str:
     # ASCII-only: HTTP headers are latin-1 and a non-ASCII client name must
     # never be able to break the download response.
@@ -190,13 +228,9 @@ def build_pptx(req: PresentationRequest) -> bytes:
     # ── 1. Client cover ──────────────────────────────────────────────────
     slide = prs.slides.add_slide(blank)
     _fill_slide(slide, NAVY)
-    kicker = "RENEWAL" if req.project_type == "renewal" else "NEW BUSINESS"
-    _add_textbox(slide, 0.9, 2.2, 8, 0.5, kicker, size=13, color=MUTED_ON_NAVY, bold=True)
+    _add_textbox(slide, 0.9, 2.2, 8, 0.5, _kicker(req), size=13, color=MUTED_ON_NAVY, bold=True)
     _add_textbox(slide, 0.9, 2.7, 11.5, 1.6, cover_title(req), size=44, color=WHITE, bold=True)
-    subtitle = f"{req.client_name} · {date.today().strftime('%B %Y')}"
-    if req.reference:
-        subtitle += f" · {req.reference}"
-    _add_textbox(slide, 0.9, 4.35, 11.5, 0.6, subtitle, size=16, color=(0xC3, 0xCF, 0xE0))
+    _add_textbox(slide, 0.9, 4.35, 11.5, 0.6, _subtitle(req), size=16, color=(0xC3, 0xCF, 0xE0))
 
     # ── 2. About the broker (fixed) ──────────────────────────────────────
     slide = prs.slides.add_slide(blank)
@@ -209,18 +243,11 @@ def build_pptx(req: PresentationRequest) -> bytes:
     _add_textbox(slide, 0.9, 1.6, 11.5, 2.2, REGULATORY_TEXT, size=12, color=INK2)
     _add_textbox(slide, 0.9, 3.9, 11.5, 0.4, "INSURERS APPROACHED", size=11,
                  color=INK3, bold=True)
-    quoted = [c.name for c in req.columns]
-    _add_textbox(slide, 0.9, 4.35, 11.5, 0.5,
-                 f"{', '.join(quoted)} — quotation{'s' if len(quoted) != 1 else ''} obtained.",
-                 size=12)
-    declined = declined_insurers(req)
-    if declined:
-        _add_textbox(
-            slide, 0.9, 4.9, 11.5, 0.5,
-            f"{', '.join(declined)} {'was' if len(declined) == 1 else 'were'} "
-            "approached but declined to quote.",
-            size=12, color=(0xB4, 0x53, 0x09),
-        )
+    _add_textbox(slide, 0.9, 4.35, 11.5, 0.5, _quoted_sentence(req), size=12)
+    declined_line = _declined_sentence(req)
+    if declined_line:
+        _add_textbox(slide, 0.9, 4.9, 11.5, 0.5, declined_line,
+                     size=12, color=(0xB4, 0x53, 0x09))
 
     # ── 4. Terms comparison ──────────────────────────────────────────────
     slide = prs.slides.add_slide(blank)
@@ -240,13 +267,13 @@ def build_pptx(req: PresentationRequest) -> bytes:
 
     _style_cell(table.cell(0, 0), "Field", size=10, bold=True, color=INK3, fill=PANEL)
     for c, col in enumerate(req.columns, start=1):
-        rec = col.id == req.recommended_id
+        rec = _is_rec(req, col)
         _style_cell(table.cell(0, c), col.name, size=10.5, bold=True,
                     color=ACCENT if rec else INK, fill=REC_FILL if rec else PANEL)
     for r, (key, label) in enumerate(PRESENTATION_ROWS, start=1):
         _style_cell(table.cell(r, 0), label, size=9, bold=True, color=INK2, fill=None)
         for c, col in enumerate(req.columns, start=1):
-            rec = col.id == req.recommended_id
+            rec = _is_rec(req, col)
             _style_cell(table.cell(r, c), _cell_text(col.values.get(key)),
                         size=9, fill=REC_FILL if rec else None)
     if req.notes.strip():
@@ -264,7 +291,7 @@ def build_pptx(req: PresentationRequest) -> bytes:
             Inches(min(5.6, 0.4 * rows)),
         )
         table = shape.table
-        headers = ["Buyer", "Company no.", "Required"] + [c.name for c in req.columns]
+        headers = _limits_headers(req)
         for c, header in enumerate(headers):
             col_obj = req.columns[c - 3] if c >= 3 else None
             rec = col_obj is not None and col_obj.id == req.recommended_id
@@ -275,7 +302,7 @@ def build_pptx(req: PresentationRequest) -> bytes:
             _style_cell(table.cell(r, 1), _cell_text(row.company_number), size=9.5)
             _style_cell(table.cell(r, 2), _cell_text(row.required), size=9.5)
             for c, col in enumerate(req.columns, start=3):
-                rec = col.id == req.recommended_id
+                rec = _is_rec(req, col)
                 _style_cell(table.cell(r, c), _cell_text(row.offers.get(col.id)),
                             size=9.5, fill=REC_FILL if rec else None)
 
@@ -283,10 +310,9 @@ def build_pptx(req: PresentationRequest) -> bytes:
     slide = prs.slides.add_slide(blank)
     _add_textbox(slide, 0.9, 0.7, 11.5, 0.7, "Comments and recommendation",
                  size=28, bold=True)
-    recommended = next((c for c in req.columns if c.id == req.recommended_id), None)
-    rec_name = recommended.name if recommended else "[no insurer selected]"
     _add_textbox(slide, 0.9, 1.7, 11.5, 1.8,
-                 RECOMMENDATION_WORDING.format(name=rec_name), size=13, color=INK2)
+                 RECOMMENDATION_WORDING.format(name=_recommended_name(req)),
+                 size=13, color=INK2)
     if req.reasons.strip():
         _add_textbox(slide, 0.9, 3.7, 11.5, 0.4, "REASONS FOR THE RECOMMENDATION",
                      size=11, color=INK3, bold=True)
@@ -363,13 +389,9 @@ def build_pdf(req: PresentationRequest) -> bytes:
     # ── 1. Cover ─────────────────────────────────────────────────────────
     page = doc.new_page(width=PAGE_W, height=PAGE_H)
     page.draw_rect(page.rect, color=None, fill=_norm(NAVY))
-    kicker = "RENEWAL" if req.project_type == "renewal" else "NEW BUSINESS"
-    _pdf_text(page, MARGIN, 170, 500, 24, kicker, size=11, color=MUTED_ON_NAVY, bold=True)
+    _pdf_text(page, MARGIN, 170, 500, 24, _kicker(req), size=11, color=MUTED_ON_NAVY, bold=True)
     _pdf_text(page, MARGIN, 200, 840, 60, cover_title(req), size=40, color=WHITE, bold=True)
-    subtitle = f"{req.client_name} · {date.today().strftime('%B %Y')}"
-    if req.reference:
-        subtitle += f" · {req.reference}"
-    _pdf_text(page, MARGIN, 280, 840, 26, subtitle, size=14, color=(0xC3, 0xCF, 0xE0))
+    _pdf_text(page, MARGIN, 280, 840, 26, _subtitle(req), size=14, color=(0xC3, 0xCF, 0xE0))
 
     # ── 2. About the broker ──────────────────────────────────────────────
     page = doc.new_page(width=PAGE_W, height=PAGE_H)
@@ -382,15 +404,10 @@ def build_pdf(req: PresentationRequest) -> bytes:
     _pdf_text(page, MARGIN, 105, 840, 150, REGULATORY_TEXT, size=10.5, color=INK2)
     _pdf_text(page, MARGIN, 280, 840, 18, "INSURERS APPROACHED", size=9,
               color=INK3, bold=True)
-    quoted = [c.name for c in req.columns]
-    _pdf_text(page, MARGIN, 302, 840, 22,
-              f"{', '.join(quoted)} — quotation{'s' if len(quoted) != 1 else ''} obtained.",
-              size=11)
-    declined = declined_insurers(req)
-    if declined:
-        _pdf_text(page, MARGIN, 328, 840, 40,
-                  f"{', '.join(declined)} {'was' if len(declined) == 1 else 'were'} "
-                  "approached but declined to quote.",
+    _pdf_text(page, MARGIN, 302, 840, 22, _quoted_sentence(req), size=11)
+    declined_line = _declined_sentence(req)
+    if declined_line:
+        _pdf_text(page, MARGIN, 328, 840, 40, declined_line,
                   size=11, color=(0xB4, 0x53, 0x09))
 
     # ── 4. Terms comparison ──────────────────────────────────────────────
@@ -401,15 +418,15 @@ def build_pdf(req: PresentationRequest) -> bytes:
     value_w = (PAGE_W - 2 * MARGIN - label_w) / n_cols
     widths = [label_w] + [value_w] * n_cols
     header = [("Field", PANEL, True, INK3)] + [
-        (c.name, REC_FILL if c.id == req.recommended_id else PANEL, True,
-         ACCENT if c.id == req.recommended_id else INK)
+        (c.name, REC_FILL if _is_rec(req, c) else PANEL, True,
+         ACCENT if _is_rec(req, c) else INK)
         for c in req.columns
     ]
     body = []
     for key, label in PRESENTATION_ROWS:
         row = [(label, None, True, INK2)]
         for col in req.columns:
-            rec = col.id == req.recommended_id
+            rec = _is_rec(req, col)
             row.append((_cell_text(col.values.get(key)), REC_FILL if rec else None,
                         False, INK))
         body.append(row)
@@ -427,8 +444,8 @@ def build_pdf(req: PresentationRequest) -> bytes:
         widths = fixed + [value_w] * n_cols
         header = [("Buyer", PANEL, True, INK3), ("Company no.", PANEL, True, INK3),
                   ("Required", PANEL, True, INK3)] + [
-            (c.name, REC_FILL if c.id == req.recommended_id else PANEL, True,
-             ACCENT if c.id == req.recommended_id else INK)
+            (c.name, REC_FILL if _is_rec(req, c) else PANEL, True,
+             ACCENT if _is_rec(req, c) else INK)
             for c in req.columns
         ]
         body = []
@@ -437,7 +454,7 @@ def build_pdf(req: PresentationRequest) -> bytes:
                      (_cell_text(row.company_number), None, False, INK2),
                      (_cell_text(row.required), None, False, INK)]
             for col in req.columns:
-                rec = col.id == req.recommended_id
+                rec = _is_rec(req, col)
                 cells.append((_cell_text(row.offers.get(col.id)),
                               REC_FILL if rec else None, False, INK))
             body.append(cells)
@@ -447,10 +464,9 @@ def build_pdf(req: PresentationRequest) -> bytes:
     page = doc.new_page(width=PAGE_W, height=PAGE_H)
     _pdf_text(page, MARGIN, 50, 840, 34, "Comments and recommendation",
               size=24, bold=True)
-    recommended = next((c for c in req.columns if c.id == req.recommended_id), None)
-    rec_name = recommended.name if recommended else "[no insurer selected]"
     _pdf_text(page, MARGIN, 110, 840, 120,
-              RECOMMENDATION_WORDING.format(name=rec_name), size=12, color=INK2)
+              RECOMMENDATION_WORDING.format(name=_recommended_name(req)),
+              size=12, color=INK2)
     if req.reasons.strip():
         _pdf_text(page, MARGIN, 250, 840, 18, "REASONS FOR THE RECOMMENDATION",
                   size=9, color=INK3, bold=True)
@@ -481,7 +497,7 @@ def build_limits_xlsx(req: PresentationRequest) -> bytes:
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.title = "Buyer credit limits"
-    headers = ["Buyer", "Company no.", "Required"] + [c.name for c in req.columns]
+    headers = _limits_headers(req)
     sheet.append(headers)
     for cell in sheet[1]:
         cell.font = XlsxFont(bold=True)

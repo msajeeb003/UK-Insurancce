@@ -1,15 +1,6 @@
 """API contract tests — the OpenAI step is stubbed, everything else is real."""
 
-import pytest
-from fastapi.testclient import TestClient
-
 import app.services.pipeline as pipeline_mod
-from app.main import app
-
-
-@pytest.fixture
-def client() -> TestClient:
-    return TestClient(app)
 
 
 def test_health(client):

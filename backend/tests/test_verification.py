@@ -4,8 +4,8 @@ Every LLM value must be found in the document text or it is flagged;
 wrong page citations are corrected; dropped ones are recovered."""
 
 from app.extraction.base import PageText
-from app.models.schemas import SourcedValue
 from app.services.verification import verify_extraction
+from tests.conftest import sv
 
 
 def make_extraction(sample_extraction, **field_overrides):
@@ -21,10 +21,6 @@ PAGES = [
                 "Deductible: £2,500 each and every loss"),
     PageText(3, "Discretionary Limit: £20,000\nMaximum Terms: 90 days"),
 ]
-
-
-def sv(value, page, conf="high"):
-    return SourcedValue(value=value, page=page, confidence=conf)
 
 
 def test_verbatim_value_on_cited_page_passes(sample_extraction):
