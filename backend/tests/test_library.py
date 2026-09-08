@@ -53,3 +53,6 @@ def test_prompt_is_built_from_the_library():
     assert "Tokio Marine HCC" in prompt
     # Set fields stay excluded.
     assert 'DO NOT extract "type of policy"' in prompt
+    # A Protracted Default waiting period must not map to extension period
+    # (seen conflated on a real Zurich indication).
+    assert "Protracted Default" in prompt

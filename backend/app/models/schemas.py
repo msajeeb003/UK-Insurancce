@@ -183,7 +183,11 @@ class QuoteExtraction(BaseModel):
         description="Maximum terms of payment insured."
     )
     max_extension_period: SourcedValue = Field(
-        description="Maximum extension period for overdue accounts."
+        description=(
+            "Maximum extension period for overdue accounts. NOT a "
+            "'Protracted Default' / claims waiting period — if only a "
+            "waiting period is stated, return null here."
+        )
     )
     additional_info: SourcedValue = Field(
         description=(
