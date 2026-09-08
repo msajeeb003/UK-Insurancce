@@ -149,8 +149,28 @@ const MAX_QUOTES = 6;
 async function uploadFiles(kind, fileList) {
   const p = proj(); if (!p) return;
   let files = Array.from(fileList);
+
+  // Same file uploaded twice (double-click, re-picked by mistake): skip it.
+  // A previous FAILED attempt is the exception — re-uploading is the retry,
+  // so the old error card is removed and the file goes through again.
+  const isDuplicate = f => p.files.some(e =>
+    e.kind === kind && e.name === f.name && e.status !== 'error');
+  const skipped = files.filter(isDuplicate).map(f => f.name);
+  files = files.filter(f => !isDuplicate(f));
+  for (const f of files) {
+    p.files = p.files.filter(e =>
+      !(e.kind === kind && e.name === f.name && e.status === 'error'));
+  }
+  if (skipped.length) {
+    alert('Already uploaded — skipped:\n· ' + skipped.join('\n· ') +
+      '\n\nTo replace a quote with a new version, upload the newer file: ' +
+      'its insurer column is updated in place, never duplicated.');
+    if (!files.length) { render(); return; }
+  }
+
   if (kind === 'quote') {
-    const room = MAX_QUOTES - p.files.filter(f => f.kind === 'quote').length;
+    const room = MAX_QUOTES - p.files.filter(
+      f => f.kind === 'quote' && f.status !== 'error').length;
     if (files.length > room) {
       alert(`Up to ${MAX_QUOTES} quotes per project — ${Math.max(room, 0)} more can be added.`);
       files = files.slice(0, Math.max(room, 0));
@@ -281,20 +301,41 @@ function applyExtraction(p, entry, body, kind) {
   // rule (config/insurers.json), never extracted; editable per column.
   const ruleDebt = body.set_fields && body.set_fields.debt_collection_support
     ? body.set_fields.debt_collection_support.value : debtRuleFor(insurer);
-  const col = {
-    id: uid(),
-    name: kind === 'expiring' ? 'Expiring — ' + (insurer || 'policy') : (insurer || entry.name.replace(/\.pdf$/i, '')),
-    manual: false, expiring: kind === 'expiring',
-    fileName: entry.name, data: {},
-    debt: ruleDebt,
-  };
+  const colName = kind === 'expiring'
+    ? 'Expiring — ' + (insurer || 'policy')
+    : (insurer || entry.name.replace(/\.pdf$/i, ''));
+
+  const freshData = {};
   for (const f of FIELDS) {
     if (f.set) continue;
     const sv = d[f.key];
     if (sv && typeof sv === 'object') {
-      col.data[f.key] = { value: sv.value || '', page: sv.page, conf: sv.confidence };
+      freshData[f.key] = { value: sv.value || '', page: sv.page, conf: sv.confidence };
     }
   }
+
+  // One automatic column per insurer (BRD 2.1: a genuine second quote from
+  // the same insurer gets a manual free-format column). A duplicate or
+  // newer upload UPDATES the existing column in place — same column id, so
+  // the recommendation and credit-limit offers stay linked.
+  const existing = p.columns.find(c =>
+    !c.manual && c.name.toLowerCase() === colName.toLowerCase());
+  if (existing) {
+    existing.data = freshData;
+    existing.debt = ruleDebt;
+    existing.fileName = entry.name;
+    entry.colId = existing.id;
+    entry.meta += ' · updated existing column';
+    mergeBuyers(p, existing.id, d.buyer_credit_limits);
+    return;
+  }
+
+  const col = {
+    id: uid(), name: colName,
+    manual: false, expiring: kind === 'expiring',
+    fileName: entry.name, data: freshData,
+    debt: ruleDebt,
+  };
   if (kind === 'expiring') p.columns.unshift(col); else p.columns.push(col);
   entry.colId = col.id;
   mergeBuyers(p, col.id, d.buyer_credit_limits);
@@ -663,7 +704,7 @@ function renderReview(p) {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
         <input class="head-input" data-edit="colname" data-col="${col.id}" value="${esc(col.name)}" style="color:${isRec ? 'var(--accent)' : 'var(--ink)'}">
         <div style="display:flex;align-items:center;gap:6px;flex:none">
-          ${col.manual ? `<span data-act="removeColumn" data-arg="${col.id}" title="Remove column" style="cursor:pointer;color:var(--ink3);font-size:15px;line-height:1">×</span>` : ''}
+          <span data-act="removeColumn" data-arg="${col.id}" title="${col.manual ? 'Remove column' : 'Remove this column and its uploaded file (re-upload to restore)'}" style="cursor:pointer;color:var(--ink3);font-size:15px;line-height:1">×</span>
           <span data-act="pickRec" data-arg="${col.id}" class="mono" style="font-size:10px;font-weight:500;padding:3px 7px;border-radius:5px;cursor:pointer;background:${isRec ? 'var(--accent)' : '#fff'};color:${isRec ? '#fff' : 'var(--ink3)'};border:1px solid ${isRec ? 'var(--accent)' : 'var(--line)'}">${isRec ? '★ REC' : 'Set rec'}</span>
         </div>
       </div>
@@ -777,7 +818,7 @@ function renderLimits(p) {
             return `<th style="text-align:left;padding:12px 14px;min-width:130px;background:${isRec ? 'var(--rec)' : 'var(--panel)'};border-bottom:1px solid var(--line);border-left:1px solid var(--line2)">
               <div style="display:flex;align-items:center;gap:7px">
                 <span style="font-size:13px;font-weight:600;color:${isRec ? 'var(--accent)' : 'var(--ink)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(col.name)}</span>
-                ${col.manual ? `<span data-act="removeColumn" data-arg="${col.id}" title="Remove this free-format column (also removes it from the comparison)" style="flex:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1">×</span>` : ''}
+                <span data-act="removeColumn" data-arg="${col.id}" title="Remove this column (also removes it from the comparison)" style="flex:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1">×</span>
               </div>
               ${col.manual ? `<span class="mono" style="display:inline-block;margin-top:4px;font-size:9px;font-weight:500;color:var(--warn);background:var(--warn-soft);padding:2px 6px;border-radius:4px">FREE FORMAT</span>` : ''}
             </th>`;
@@ -986,6 +1027,10 @@ const ACTIONS = {
     p.columns = p.columns.filter(c => c.id !== colId);
     if (p.recommended === colId) p.recommended = null;
     p.credit.forEach(r => delete r.offers[colId]);
+    // Drop the upload card that produced this column, so the file list and
+    // the declined-insurers logic stay truthful (and the file can be
+    // re-uploaded cleanly later).
+    p.files = p.files.filter(f => f.colId !== colId);
     touch(p); render();
   },
   openSource(caption) { state.source = { caption }; render(); },

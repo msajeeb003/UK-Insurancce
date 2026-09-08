@@ -66,6 +66,10 @@ async def security_headers(request: Request, call_next) -> Response:
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Content-Security-Policy"] = CSP
+    # Frontend files must revalidate on every load (cheap 304s via ETag) —
+    # otherwise brokers keep running a stale app.js after each deployment.
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
     return response
 
 
