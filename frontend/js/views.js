@@ -527,7 +527,7 @@ function renderRecommend(p) {
     </div>
     <div class="card" style="padding:20px 22px;margin-bottom:16px">
       <div class="mono" style="font-size:11px;font-weight:500;letter-spacing:.5px;text-transform:uppercase;color:var(--ink3);margin-bottom:10px">Standard wording — fixed</div>
-      <p style="font-size:13.5px;line-height:1.65;color:var(--ink2);margin:0">Having reviewed the quotations obtained on your behalf, we recommend <strong style="color:var(--accent);background:var(--accent-soft);padding:1px 6px;border-radius:5px">${esc(recName)}</strong>. This recommendation reflects the cover, terms and pricing offered relative to the alternatives presented. This document is a summary; the policy wording prevails. UK Credit Insurance Brokers is authorised and regulated by the Financial Conduct Authority.</p>
+      <p style="font-size:13.5px;line-height:1.65;color:var(--ink2);margin:0">The policy we propose to arrange is provided by <strong style="color:var(--accent);background:var(--accent-soft);padding:1px 6px;border-radius:5px">${esc(recName)}</strong>, which is one of the UK’s leading Credit Insurance companies. An explanation of the proposed policy is included in the policy documents. We are not contractually obliged to purchase insurance products from ${esc(recName)}. Our past experience, and analysis of the market, has shown that the cover provided by ${esc(recName)} is comprehensive and its premiums competitive.</p>
     </div>
     <div class="card" style="padding:16px 18px">
       <label style="display:block;font-size:12.5px;font-weight:600;color:var(--ink2);margin-bottom:8px">Reasons for the recommendation <span style="color:var(--ink3);font-weight:400">— free text</span></label>
@@ -559,14 +559,14 @@ function renderExport(p) {
       <h1 style="font-size:26px;margin:0 0 6px;font-weight:700;letter-spacing:-.4px">Generate &amp; export</h1>
       <p style="color:var(--ink2);font-size:13.5px;margin:0 0 20px">Preview of the presentation. Regenerating replaces the previous export under this project.</p>
       <div id="export-preview" style="display:flex;flex-direction:column;gap:16px">
-        <div style="aspect-ratio:16/9;border:1px solid var(--line);border-radius:10px;background:linear-gradient(155deg,#0f1424,#252f68);color:#fff;padding:34px 40px;display:flex;flex-direction:column;justify-content:center;box-shadow:0 4px 18px rgba(20,30,50,.08)">
-          <div class="mono" style="font-size:12px;font-weight:500;color:#8fa2c9;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:16px">${isRen ? 'Renewal' : 'New business'}</div>
-          <div style="font-size:34px;font-weight:600;line-height:1.15;letter-spacing:-.5px;max-width:80%">${isRen ? 'Renewal of Credit Insurance' : 'Credit Insurance Proposals'}</div>
-          <div style="margin-top:20px;font-size:15px;color:#c3cfe0">${esc(p.clientName || 'Client')} · ${monthLabel()}</div>
+        <div style="aspect-ratio:16/9;border:1px solid var(--line);border-radius:10px;background:linear-gradient(115deg,#ffffff 55%,#14c0d5 55.5%,#14c0d5 63%,#12395e 63.5%);color:#111;padding:34px 40px;display:flex;flex-direction:column;justify-content:center;box-shadow:0 4px 18px rgba(20,30,50,.08)">
+          <div style="font-size:14px;font-weight:700;color:#12395e;margin-bottom:16px">UK Credit Insurance Brokers</div>
+          <div style="font-size:30px;font-weight:700;line-height:1.15;letter-spacing:-.5px;max-width:56%">${esc(p.clientName || 'Client')} - ${isRen ? 'Renewal Credit Insurance Presentation' : 'Credit Insurance Presentation'}</div>
+          <div style="margin-top:20px;font-size:14px;color:var(--ink2)">${monthLabel()} · ukcreditinsurance.com</div>
         </div>
         <div class="card" style="padding:24px 28px;border-radius:14px;background:#fff">
-          <div style="font-size:16px;font-weight:600;margin-bottom:10px">Important information</div>
-          <p style="font-size:12px;color:var(--ink2);line-height:1.6;margin:0 0 14px">Regulatory wording as required by the Financial Conduct Authority. This summary does not amend the policy documents.</p>
+          <div style="font-size:16px;font-weight:600;margin-bottom:10px">Feedback of Terms</div>
+          <p style="font-size:12px;color:var(--ink2);line-height:1.6;margin:0 0 14px">Insurance Act 2015 ‘Duty of Fair Presentation’ wording as required — fixed template text. This summary does not amend the policy documents.</p>
           <div class="mono" style="font-size:10.5px;font-weight:500;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Insurers approached</div>
           <div style="font-size:12.5px;color:var(--ink);margin-bottom:8px">${quoted.length ? esc(quoted.join(', ')) + ' — quotations obtained.' : 'No quotations extracted yet.'}</div>
           ${declined.length ? `<div style="font-size:12.5px;color:var(--warn);background:var(--warn-soft);padding:7px 10px;border-radius:6px">${esc(declined.join(', '))} ${declined.length === 1 ? 'was' : 'were'} approached but declined to quote.</div>` : ''}

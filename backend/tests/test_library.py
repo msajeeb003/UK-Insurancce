@@ -47,10 +47,16 @@ def test_terminology_covers_every_extracted_scalar():
 
 def test_prompt_is_built_from_the_library():
     prompt = build_system_prompt()
-    # A Nexus wording from the client's terminology sheet must reach the LLM.
+    # Wordings from the client's official terminology sheets must reach the
+    # LLM: Nexus, Atradius, Coface, Allianz.
     assert "Uninsured Amount" in prompt
-    # The standing insurer list aids identification.
+    assert "Projected Insurable Turnover" in prompt
+    assert "Deductible Value" in prompt
+    assert "Approved Limit fees" in prompt
+    # The standing insurer list aids identification (Cartan from the
+    # approved sample deck's approached list included).
     assert "Tokio Marine HCC" in prompt
+    assert "Cartan" in prompt
     # Set fields stay excluded.
     assert 'DO NOT extract "type of policy"' in prompt
     # A Protracted Default waiting period must not map to extension period

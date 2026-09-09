@@ -21,21 +21,21 @@ export function setInsurers(list) { INSURERS = list; }
 /* Review grid rows. `key` matches the backend JSON where extracted;
    set:true rows are broker/rule-set (never extracted). */
 export const FIELDS = [
-  { key: 'type',     label: 'Type of policy', tag: 'SET', note: 'Set by broker · overridable', set: true },
-  { key: 'annual_turnover', label: 'Annual turnover' },
-  { key: 'premium_rate', label: 'Premium rate' },
-  { key: 'estimated_annual_premium_exc_ipt', label: 'Estimated annual premium', note: 'exc IPT', confirm: 'premium' },
-  { key: 'minimum_annual_premium', label: 'Minimum annual premium' },
-  { key: 'credit_limit_charges', label: 'Credit limit charges' },
-  { key: 'debt',     label: 'Debt collection support', tag: 'RULE', note: 'Set by insurer rule', set: true },
+  { key: 'annual_turnover', label: 'Turnover' },
+  { key: 'type',     label: 'Type of Policy', tag: 'SET', note: 'Set by broker · overridable', set: true },
+  { key: 'premium_rate', label: 'Premium Rate' },
+  { key: 'estimated_annual_premium_exc_ipt', label: 'Estimated Annual Premium', note: 'Excl. IPT', confirm: 'premium' },
+  { key: 'minimum_annual_premium', label: 'Minimum Annual Premium', note: 'Excl. IPT' },
+  { key: 'credit_limit_charges', label: 'Credit Limit Charges', note: 'Excl. VAT' },
+  { key: 'debt',     label: 'Debt Collection support', tag: 'RULE', note: 'Set by insurer rule', set: true },
   { key: 'indemnity', label: 'Indemnity', confirm: 'indemnity' },
   { key: 'excess',   label: 'Excess', confirm: 'excess' },
-  { key: 'excess_type', label: 'Excess type', note: 'Insurer’s own term' },
-  { key: 'max_annual_liability', label: 'Max annual liability', confirm: 'maxLiability' },
-  { key: 'discretionary_limit', label: 'Discretionary limit' },
-  { key: 'max_terms_of_payment', label: 'Max terms of payment' },
-  { key: 'max_extension_period', label: 'Max extension period' },
-  { key: 'additional_info', label: 'Additional info', note: 'Free-format' },
+  { key: 'excess_type', label: 'Excess Type', note: 'Insurer’s own term' },
+  { key: 'max_annual_liability', label: 'Max Annual Liability', confirm: 'maxLiability' },
+  { key: 'discretionary_limit', label: 'Discretionary Limit' },
+  { key: 'max_terms_of_payment', label: 'Max Terms of Payment' },
+  { key: 'max_extension_period', label: 'Max Extension Period' },
+  { key: 'additional_info', label: 'Additional Info', note: 'Free-format' },
 ];
 
 export const CONFIRM_KEYS = ['premium', 'indemnity', 'excess', 'maxLiability'];

@@ -13,23 +13,24 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 # The 16-row comparison list (BRD 2.3): "Insurer" is the column heading;
-# these are the rows, in slide order. 'type' and 'debt' are the set fields.
+# these are the rows, in the order and wording of the brokerage's approved
+# sample deck. 'type' and 'debt' are the set fields.
 PRESENTATION_ROWS: list[tuple[str, str]] = [
-    ("type", "Type of policy"),
-    ("annual_turnover", "Annual turnover"),
-    ("premium_rate", "Premium rate"),
-    ("estimated_annual_premium_exc_ipt", "Estimated annual premium (exc IPT)"),
-    ("minimum_annual_premium", "Minimum annual premium"),
-    ("credit_limit_charges", "Credit limit charges"),
-    ("debt", "Debt collection support"),
+    ("annual_turnover", "Turnover"),
+    ("type", "Type of Policy"),
+    ("premium_rate", "Premium Rate"),
+    ("estimated_annual_premium_exc_ipt", "Estimated Annual Premium (Excl. IPT)"),
+    ("minimum_annual_premium", "Minimum Annual Premium (Excl. IPT)"),
+    ("credit_limit_charges", "Credit Limit Charges (Excl. VAT)"),
+    ("debt", "Debt Collection support"),
     ("indemnity", "Indemnity"),
     ("excess", "Excess"),
-    ("excess_type", "Excess type"),
-    ("max_annual_liability", "Max annual liability"),
-    ("discretionary_limit", "Discretionary limit"),
-    ("max_terms_of_payment", "Max terms of payment"),
-    ("max_extension_period", "Max extension period"),
-    ("additional_info", "Additional info"),
+    ("excess_type", "Excess Type"),
+    ("max_annual_liability", "Max Annual Liability"),
+    ("discretionary_limit", "Discretionary Limit"),
+    ("max_terms_of_payment", "Max Terms of Payment"),
+    ("max_extension_period", "Max Extension Period"),
+    ("additional_info", "Additional Info"),
 ]
 
 
