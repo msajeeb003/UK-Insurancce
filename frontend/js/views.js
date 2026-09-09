@@ -564,7 +564,10 @@ function renderExport(p) {
   const quoted = p.columns.filter(c => !c.manual && !c.expiring).map(c => c.name);
   const declined = p.approached
     .map(id => INSURERS.find(i => i.id === id))
-    .filter(i => i && !p.columns.some(c => c.name.toLowerCase().includes(i.name.toLowerCase())))
+    .filter(i => i && !p.columns.some(c =>
+      (c.matched && c.matched.toLowerCase() === i.name.toLowerCase())
+      || c.name.toLowerCase().includes(i.name.toLowerCase())
+      || i.name.toLowerCase().includes(c.name.toLowerCase())))
     .map(i => i.name);
   const miniRows = MINI_FIELDS.map(([key, label]) => `
     <tr>

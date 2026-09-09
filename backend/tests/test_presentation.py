@@ -80,6 +80,37 @@ def test_late_quote_moves_off_the_declined_line():
     assert declined_insurers(req) == []
 
 
+def test_document_wording_column_is_not_declined():
+    """A column titled with the insurer's own entity wording must count as
+    that insurer's quote — real cases: 'HCC International Insurance
+    Company plc' is Tokio Marine HCC; the Coface UK branch's French name
+    does not contain 'Coface' at all."""
+    req = make_request(
+        approached_insurers=["Tokio Marine HCC", "Coface", "Zurich"],
+        columns=[
+            PresentationColumn(
+                id="h", name="HCC International Insurance Company plc",
+                matched="Tokio Marine HCC", values={}),
+            PresentationColumn(
+                id="c",
+                name="Compagnie Française d'Assurance pour le Commerce "
+                     "Extérieur SA. - UK Branch",
+                matched="Coface", values={}),
+        ],
+        recommended_id="h",
+    )
+    assert declined_insurers(req) == ["Zurich"]
+
+
+def test_reasons_starting_with_numbers_stay_intact():
+    from app.services.presentation import _reason_lines
+    req = make_request(reasons="50% cheaper than the expiring policy\n2) Strong service record")
+    assert _reason_lines(req) == [
+        "1. 50% cheaper than the expiring policy",
+        "2. Strong service record",
+    ]
+
+
 # ── PPTX ─────────────────────────────────────────────────────────────────
 
 def test_pptx_has_the_brd_page_set():
@@ -151,6 +182,22 @@ def test_pdf_keeps_long_cell_values():
     text = "\n".join(page.get_text() for page in doc)
     doc.close()
     assert "Waiting Period for Protracted Default" in text
+
+
+def test_pdf_keeps_long_notes_and_reasons():
+    """Regression: _pdf_text dropped the whole text when a broker-written
+    note or reasons block outgrew its fixed box."""
+    req = make_request(
+        notes=("All quotes are subject to underwriting and policy terms. " * 8
+               + "END-OF-NOTES-MARKER"),
+        reasons="\n".join(f"Reason line {i} with meaningful detail attached"
+                          for i in range(1, 9)) + "\nFINAL-REASON-MARKER",
+    )
+    doc = pymupdf.open(stream=build_pdf(req), filetype="pdf")
+    text = "\n".join(page.get_text() for page in doc)
+    doc.close()
+    assert "END-OF-NOTES-MARKER" in text
+    assert "FINAL-REASON-MARKER" in text
 
 
 def test_pdf_omits_limits_page_when_none():

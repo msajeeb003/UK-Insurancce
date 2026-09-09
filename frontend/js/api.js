@@ -31,7 +31,7 @@ function debtRuleFor(insurerName) {
   return hit && hit.debtIncl ? 'Included' : 'Outsourced';
 }
 
-function mergeBuyers(p, colId, buyers) {
+function mergeBuyers(p, colId, buyers, pendKey) {
   for (const b of buyers || []) {
     if (!b.buyer_name && !b.company_number) continue;
     let row = p.credit.find(r =>
@@ -43,7 +43,29 @@ function mergeBuyers(p, colId, buyers) {
     }
     if (!row.reg && b.company_number) row.reg = b.company_number;
     if (!row.req && b.limit_required) row.req = b.limit_required;
-    if (colId && b.limit_offered) row.offers[colId] = b.limit_offered;
+    if (colId && b.limit_offered) {
+      row.offers[colId] = b.limit_offered;
+    } else if (pendKey && b.limit_offered) {
+      // Schedule arrived before its quote: park the offer under the
+      // insurer's key so it attaches when that column is created.
+      row.pending = row.pending || {};
+      row.pending[pendKey] = b.limit_offered;
+    }
+  }
+}
+
+/* Attach offers parked by mergeBuyers once the insurer's column exists. */
+function attachPendingOffers(p, col) {
+  const keys = [col.matched, col.name].filter(Boolean).map(k => k.toLowerCase());
+  for (const row of p.credit) {
+    if (!row.pending) continue;
+    for (const key of Object.keys(row.pending)) {
+      if (keys.some(k => k === key || k.includes(key) || key.includes(k))) {
+        if (!row.offers[col.id]) row.offers[col.id] = row.pending[key];
+        delete row.pending[key];
+      }
+    }
+    if (!Object.keys(row.pending).length) delete row.pending;
   }
 }
 
@@ -139,7 +161,8 @@ function applyExtraction(p, entry, body, kind) {
         c.name.toLowerCase().includes(insurer.toLowerCase())
         || insurer.toLowerCase().includes(c.name.toLowerCase())))
       || null;
-    mergeBuyers(p, col ? col.id : null, d.buyer_credit_limits);
+    mergeBuyers(p, col ? col.id : null, d.buyer_credit_limits,
+      (matched || insurer || '').toLowerCase() || null);
     if (col) entry.meta += ' · limits added to ' + col.name;
     return;
   }
@@ -175,6 +198,7 @@ function applyExtraction(p, entry, body, kind) {
     entry.colId = existing.id;
     entry.meta += ' · updated existing column';
     mergeBuyers(p, existing.id, d.buyer_credit_limits);
+    attachPendingOffers(p, existing);
     return;
   }
 
@@ -187,6 +211,7 @@ function applyExtraction(p, entry, body, kind) {
   if (kind === 'expiring') p.columns.unshift(col); else p.columns.push(col);
   entry.colId = col.id;
   mergeBuyers(p, col.id, d.buyer_credit_limits);
+  attachPendingOffers(p, col);
 }
 
 /* ── Presentation export (BRD 2.8) — server renders PPTX/PDF/xlsx ────── */
@@ -194,7 +219,7 @@ function buildPresentationPayload(p) {
   const columns = p.columns.map(col => {
     const values = {};
     for (const f of FIELDS) values[f.key] = cellValue(p, col, f) || '';
-    return { id: col.id, name: col.name, values };
+    return { id: col.id, name: col.name, matched: col.matched || null, values };
   });
   return {
     client_name: p.clientName || 'Client',

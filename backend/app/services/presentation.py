@@ -157,12 +157,21 @@ def declined_insurers(req: PresentationRequest) -> list[str]:
     """
     BRD 2.1/S8: approached insurers with no quote column are auto-named as
     declined; a late quote (new column) moves them off this line.
+
+    A column counts as that insurer's quote when the approached name
+    matches its standing-list `matched` name OR its display name — a
+    column titled with the document's own wording ("HCC International
+    Insurance Company plc") must never leave Tokio Marine HCC on the
+    declined line.
     """
+    matched_names = {c.matched.lower() for c in req.columns if c.matched}
     column_names = [c.name.lower() for c in req.columns]
     declined = []
     for name in req.approached_insurers:
         needle = name.lower()
-        quoted = any(needle in cn or cn in needle for cn in column_names)
+        quoted = needle in matched_names or any(
+            needle in cn or cn in needle for cn in column_names
+        )
         if not quoted:
             declined.append(name)
     return declined
@@ -220,7 +229,9 @@ def _col_fill(req: PresentationRequest, col):
 
 
 def _reason_lines(req: PresentationRequest) -> list[str]:
-    lines = [ln.strip().lstrip("0123456789.)- ").strip()
+    # Strip only a leading enumeration ("1. ", "2) ", "- ") — never the
+    # start of the reason itself ("50% cheaper" must stay intact).
+    lines = [re.sub(r"^\s*(?:\d+[.)]\s+|[-•]\s+)", "", ln).strip()
              for ln in req.reasons.splitlines() if ln.strip()]
     return [f"{i}. {ln}" for i, ln in enumerate(lines, start=1)]
 
@@ -483,13 +494,26 @@ def _pdf_safe(text: str) -> str:
 
 
 def _pdf_text(page, x, y, w, h, text, *, size, color=INK, bold=False):
-    # insert_textbox silently drops text whose rect is shorter than the
-    # rendered line height — guarantee headroom so titles can never vanish.
+    # insert_textbox silently drops ALL text when it doesn't fit its rect.
+    # Shrink the font first; as a last resort extend the rect by the
+    # reported deficit — overflowing text beats vanished text (BRD 2.2:
+    # a broker-written note must reach the export).
     h = max(h, size * 2)
+    font = "hebo" if bold else "helv"
+    safe = _pdf_safe(text)
+    fs = size
+    rc = -1.0
+    while fs >= 6:
+        rc = page.insert_textbox(
+            pymupdf.Rect(x, y, x + w, y + h), safe,
+            fontsize=fs, fontname=font, color=_norm(color),
+        )
+        if rc >= 0:
+            return
+        fs -= 0.5
     page.insert_textbox(
-        pymupdf.Rect(x, y, x + w, y + h), _pdf_safe(text),
-        fontsize=size, fontname="hebo" if bold else "helv",
-        color=_norm(color),
+        pymupdf.Rect(x, y, x + w, y + h - rc + 12), safe,
+        fontsize=6, fontname=font, color=_norm(color),
     )
 
 

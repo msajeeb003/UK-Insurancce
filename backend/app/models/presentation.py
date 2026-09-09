@@ -39,6 +39,17 @@ class PresentationColumn(BaseModel):
 
     id: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=120)
+    matched: str | None = Field(
+        default=None,
+        max_length=120,
+        description=(
+            "Standing-list insurer name this column was matched to at "
+            "extraction time (e.g. a column named 'HCC International "
+            "Insurance Company plc' matches 'Tokio Marine HCC'). Used so "
+            "the declined-to-quote line never names an insurer whose "
+            "quote is in the comparison under its document wording."
+        ),
+    )
     values: dict[str, str] = Field(
         default_factory=dict,
         description=(

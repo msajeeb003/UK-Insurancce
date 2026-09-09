@@ -14,6 +14,8 @@ export let INSURERS = [
   { id: 'markel',   name: 'Markel',           debtIncl: false },
   { id: 'nexus',    name: 'Nexus',            debtIncl: false },
   { id: 'aviva',    name: 'Aviva',            debtIncl: false },
+  { id: 'zurich',   name: 'Zurich',           debtIncl: false },
+  { id: 'cartan',   name: 'Cartan',           debtIncl: false },
 ];
 
 export function setInsurers(list) { INSURERS = list; }
