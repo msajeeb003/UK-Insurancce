@@ -144,7 +144,12 @@ function applyExtraction(p, entry, body, kind) {
   const review = body.review || { missing_fields: [], uncertain_fields: [] };
   const nCheck = review.uncertain_fields.length;
   entry.status = 'extracted';
-  entry.meta = (insurer || 'Unrecognised insurer')
+  // When the document's entity wording maps to a different standing-list
+  // insurer, say so on the file card so the broker can verify the match.
+  const matchNote = matched && insurer
+    && matched.toLowerCase() !== insurer.toLowerCase()
+    ? ' (matched: ' + matched + ')' : '';
+  entry.meta = (insurer || 'Unrecognised insurer') + matchNote
     + ' · ' + (DOC_TYPE_LABELS[d.document_type] || kindLabel(kind))
     + (body.meta.extraction_engine === 'azure_document_intelligence' ? ' (scanned)' : '')
     + ' · ' + body.meta.page_count + ' pages'
