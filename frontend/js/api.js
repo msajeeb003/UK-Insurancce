@@ -115,6 +115,10 @@ export async function uploadFiles(kind, fileList) {
 function applyExtraction(p, entry, body, kind) {
   const d = body.data;
   const insurer = d.insurer && d.insurer.value ? d.insurer.value : null;
+  // Standing-list name the server's alias matching resolved (e.g. a Zurich
+  // schedule issued as "The Marine Insurance Company Limited" -> "Zurich").
+  const matched = body.set_fields && body.set_fields.debt_collection_support
+    ? body.set_fields.debt_collection_support.matched_insurer : null;
   const review = body.review || { missing_fields: [], uncertain_fields: [] };
   const nCheck = review.uncertain_fields.length;
   entry.status = 'extracted';
@@ -124,11 +128,19 @@ function applyExtraction(p, entry, body, kind) {
     + ' · ' + body.meta.page_count + ' pages'
     + (nCheck ? ' · ' + nCheck + ' value' + (nCheck === 1 ? '' : 's') + ' to verify' : '');
 
-  if (kind === 'limits') {
-    // Attribute offers to the matching insurer column if one exists.
-    const col = insurer
-      ? p.columns.find(c => c.name.toLowerCase().includes(insurer.toLowerCase())) : null;
+  // A credit-limit schedule never becomes a comparison column — even when
+  // it arrives through the quotes slot. Its offers attach to the column of
+  // the same insurer, matched by the standing-list name first (so a Zurich
+  // schedule finds the Zurich column whatever entity name it prints).
+  if (kind === 'limits' || d.document_type === 'credit_limit_schedule') {
+    const col =
+      (matched && p.columns.find(c => c.matched === matched))
+      || (insurer && p.columns.find(c =>
+        c.name.toLowerCase().includes(insurer.toLowerCase())
+        || insurer.toLowerCase().includes(c.name.toLowerCase())))
+      || null;
     mergeBuyers(p, col ? col.id : null, d.buyer_credit_limits);
+    if (col) entry.meta += ' · limits added to ' + col.name;
     return;
   }
 
@@ -158,6 +170,7 @@ function applyExtraction(p, entry, body, kind) {
   if (existing) {
     existing.data = freshData;
     existing.debt = ruleDebt;
+    existing.matched = matched;
     existing.fileName = entry.name;
     entry.colId = existing.id;
     entry.meta += ' · updated existing column';
@@ -169,7 +182,7 @@ function applyExtraction(p, entry, body, kind) {
     id: uid(), name: colName,
     manual: false, expiring: kind === 'expiring',
     fileName: entry.name, data: freshData,
-    debt: ruleDebt,
+    debt: ruleDebt, matched,
   };
   if (kind === 'expiring') p.columns.unshift(col); else p.columns.push(col);
   entry.colId = col.id;
