@@ -257,7 +257,7 @@ function renderSetup(p) {
         </div>
         <label class="field-label" style="margin-bottom:8px">Project type</label>
         <div style="display:flex;gap:10px;margin-bottom:${isRen ? '18px' : '24px'}">
-          ${typeCard('new', !isRen, 'New business', 'Front page: “Credit Insurance Proposals”')}
+          ${typeCard('new', !isRen, 'New business', 'Front page: “Credit Insurance Presentation”')}
           ${typeCard('renewal', isRen, 'Renewal', 'Compares against the expiring policy')}
         </div>
         ${isRen ? `<p style="font-size:12.5px;color:var(--warn);background:var(--warn-soft);border-radius:7px;padding:9px 12px;margin:0 0 24px">Renewal selected — the expiring policy must be uploaded on the next step as the comparison baseline.</p>` : ''}
@@ -327,20 +327,20 @@ function renderUpload(p) {
       <div data-drop="quote" style="border:1.5px dashed var(--line);border-radius:12px;padding:24px 18px;text-align:center;background:var(--surface)">
         <div style="width:38px;height:38px;border-radius:9px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;margin:0 auto 12px;pointer-events:none">${ICON.upload}</div>
         <div style="font-weight:600;font-size:14px;margin-bottom:3px;pointer-events:none">Quotes</div>
-        <div style="font-size:12px;color:var(--ink2);margin-bottom:14px;pointer-events:none">Drag &amp; drop PDFs here, incl. scanned. Up to 6.</div>
+        <div style="font-size:12px;color:var(--ink2);margin-bottom:14px;pointer-events:none">PDF, incl. scanned. Up to 6.</div>
         <button class="btn-soft" data-act="pickFile" data-arg="file-quote">Choose files</button>
       </div>
       <div data-drop="limits" style="border:1.5px dashed var(--line);border-radius:12px;padding:24px 18px;text-align:center;background:var(--surface)">
         <div style="width:38px;height:38px;border-radius:9px;background:var(--panel);color:var(--ink2);display:grid;place-items:center;margin:0 auto 12px;pointer-events:none">${ICON.table}</div>
         <div style="font-weight:600;font-size:14px;margin-bottom:3px;pointer-events:none">Credit-limit docs</div>
-        <div style="font-size:12px;color:var(--ink2);margin-bottom:14px;pointer-events:none">Drag &amp; drop — PDF or Excel. Optional.</div>
+        <div style="font-size:12px;color:var(--ink2);margin-bottom:14px;pointer-events:none">PDF or Excel. Optional.</div>
         <button data-act="pickFile" data-arg="file-limits" style="font-size:12.5px;font-weight:600;color:var(--ink2);background:var(--panel);border:1px solid var(--line);padding:8px 14px;border-radius:7px;cursor:pointer">Choose files</button>
       </div>
       ${isRen ? `
       <div data-drop="expiring" style="border:1.5px dashed var(--warn);border-radius:12px;padding:24px 18px;text-align:center;background:var(--warn-soft)">
         <div style="width:38px;height:38px;border-radius:9px;background:#fff;color:var(--warn);display:grid;place-items:center;margin:0 auto 12px;pointer-events:none">${ICON.refresh}</div>
         <div style="font-weight:600;font-size:14px;margin-bottom:3px;pointer-events:none">Expiring policy</div>
-        <div style="font-size:12px;color:var(--warn);margin-bottom:14px;pointer-events:none">Drag &amp; drop — required for renewal.</div>
+        <div style="font-size:12px;color:var(--warn);margin-bottom:14px;pointer-events:none">Required for renewal.</div>
         <button data-act="pickFile" data-arg="file-expiring" style="font-size:12.5px;font-weight:600;color:var(--warn);background:#fff;border:1px solid var(--warn);padding:8px 14px;border-radius:7px;cursor:pointer">Choose file</button>
       </div>` : ''}
     </div>
@@ -420,7 +420,7 @@ function renderReview(p) {
       </div>
       <div style="display:flex;gap:16px;font-size:11.5px;color:var(--ink2);align-items:center">
         <span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--set-soft);border:1px solid var(--set)"></span>Set field</span>
-        <span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--warn-soft);border:1px solid var(--warn)"></span>Confirm / AI-uncertain</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--warn-soft);border:1px solid var(--warn)"></span>Confirm before export</span>
         <span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--ok-soft);border:1px solid var(--ok)"></span>Confirmed</span>
         <span style="display:flex;align-items:center;gap:6px"><span style="width:11px;height:11px;border-radius:3px;background:var(--rec);border:1px solid var(--accent)"></span>Recommended</span>
       </div>
@@ -462,8 +462,8 @@ function moneyTotal(vals) {
 /* ── S6 Credit limits ──────────────────────────────────────────────── */
 function renderLimits(p) {
   const th = (txt, extra) => `<th style="text-align:left;padding:12px 14px;font:500 11px 'IBM Plex Mono';letter-spacing:.4px;text-transform:uppercase;color:var(--ink3);background:var(--panel);border-bottom:1px solid var(--line);${extra || ''}">${txt}</th>`;
-  // Wide enough that names, limits and the "Not reviewed" placeholder never
-  // truncate; the card scrolls horizontally when columns outgrow it.
+  // Wide enough that names and limits never truncate; the card scrolls
+  // horizontally when columns outgrow it.
   const tableMin = 470 + p.columns.length * 130;
   const rows = p.credit.map(r => `
     <tr>
@@ -473,7 +473,7 @@ function renderLimits(p) {
       ${p.columns.map(col => {
         const v = r.offers[col.id] || '';
         return `<td style="padding:2px 6px;border-bottom:1px solid var(--line2);border-left:1px solid var(--line2);background:${col.id === p.recommended ? 'var(--rec)' : 'transparent'}">
-          <input class="cell-input" style="padding:8px 6px;font-style:${v ? 'normal' : 'italic'}" data-edit="credit" data-row="${r.id}" data-part="offer" data-col="${col.id}" value="${esc(v)}" placeholder="Not reviewed">
+          <input class="cell-input" style="padding:8px 6px" data-edit="credit" data-row="${r.id}" data-part="offer" data-col="${col.id}" value="${esc(v)}" placeholder="—">
         </td>`;
       }).join('')}
       <td style="text-align:center;border-bottom:1px solid var(--line2)"><span data-act="removeCredit" data-arg="${r.id}" title="Remove buyer row" style="color:var(--ink3);cursor:pointer;font-size:16px">×</span></td>

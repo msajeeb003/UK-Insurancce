@@ -184,8 +184,8 @@ def _cover_heading(req: PresentationRequest) -> str:
 
 
 def _subtitle(req: PresentationRequest) -> str:
-    subtitle = date.today().strftime("%B %Y")
-    return f"{subtitle} · {req.reference}" if req.reference else subtitle
+    # BRD 2.8 cover: client name, date and the title — nothing else.
+    return date.today().strftime("%B %Y")
 
 
 def _approached_sentence(req: PresentationRequest) -> str:
