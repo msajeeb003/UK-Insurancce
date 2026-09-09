@@ -4,7 +4,7 @@
 import {
   CONFIRM_FIELD_MAP, DOC_TYPE_LABELS, FIELDS, INSURERS, MAX_QUOTES, setInsurers,
 } from './constants.js';
-import { proj, touch, uid } from './state.js';
+import { proj, state, touch, uid } from './state.js';
 import { cellValue, render } from './views.js';
 
 /* ── Standing insurer list (configuration, not code) ─────────────────── */
@@ -79,6 +79,14 @@ async function readDetail(res) {
   return detail;
 }
 
+/* Session gone (expired, or the server was redeployed): back to sign-in. */
+function sessionExpired() {
+  alert('Your session has expired — please sign in again.');
+  state.user = null;
+  state.screen = 'login';
+  render();
+}
+
 /* ── Upload -> POST /extract-quote ───────────────────────────────────── */
 export async function uploadFiles(kind, fileList) {
   const p = proj(); if (!p) return;
@@ -124,6 +132,13 @@ export async function uploadFiles(kind, fileList) {
       fd.append('project_id', p.id);   // BRD S4: documents retained
       fd.append('doc_kind', kind);
       const res = await fetch('/extract-quote', { method: 'POST', body: fd });
+      if (res.status === 401) {
+        // Session expired mid-work (e.g. a redeploy): back to sign-in —
+        // the document is fine, so drop the card instead of flagging it.
+        p.files = p.files.filter(e => e.id !== entry.id);
+        sessionExpired();
+        return;
+      }
       if (!res.ok) throw new Error(await readDetail(res));
       const body = await res.json();
       applyExtraction(p, entry, body, kind);
@@ -261,6 +276,7 @@ export async function downloadExport(format) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildPresentationPayload(p)),
     });
+    if (res.status === 401) { sessionExpired(); return false; }
     if (!res.ok) {
       alert('Export failed: ' + await readDetail(res));
       return false;
