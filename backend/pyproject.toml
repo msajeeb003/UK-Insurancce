@@ -16,3 +16,6 @@ ignore = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# Put backend/ on sys.path so `pytest` finds the `app` package however it
+# is invoked (CI runs the bare `pytest` binary, which does not add CWD).
+pythonpath = ["."]
