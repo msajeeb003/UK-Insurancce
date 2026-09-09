@@ -30,9 +30,11 @@ const ACTIONS = {
     state.screen = 'projects';
     render();
   },
+  userMenu() { state.userMenu = !state.userMenu; render(); },
   async signOut() {
     try { await fetch('/auth/logout', { method: 'POST' }); } catch (e) {}
     state.user = null; state.projects = []; state.currentId = null;
+    state.userMenu = false;
     state.screen = 'login';
     render();
   },
@@ -125,6 +127,11 @@ const ACTIONS = {
 /* ── Event delegation ──────────────────────────────────────────────── */
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
+  // Any click outside the avatar closes the account menu.
+  if (state.userMenu && (!el || el.dataset.act !== 'userMenu')) {
+    state.userMenu = false;
+    if (!el) { render(); return; }
+  }
   if (!el) return;
   const fn = ACTIONS[el.dataset.act];
   if (fn) fn(el.dataset.arg, el.dataset.arg2);

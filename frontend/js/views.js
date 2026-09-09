@@ -132,7 +132,17 @@ function renderTopbar() {
         <div style="font-size:13px;font-weight:500">${esc(name)}</div>
         <div style="font-size:11px;color:var(--ink3)">Underwriting desk</div>
       </div>
-      <div data-act="signOut" title="Sign out" style="width:32px;height:32px;border-radius:50%;background:var(--set-soft);color:var(--set);display:grid;place-items:center;font-weight:600;font-size:13px;cursor:pointer">${esc(u.initials)}</div>
+      <div style="position:relative">
+        <div data-act="userMenu" title="Account" style="width:32px;height:32px;border-radius:50%;background:var(--set-soft);color:var(--set);display:grid;place-items:center;font-weight:600;font-size:13px;cursor:pointer">${esc(u.initials)}</div>
+        ${state.userMenu ? `
+        <div style="position:absolute;top:40px;right:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 28px rgba(15,23,41,.14);min-width:210px;z-index:60;overflow:hidden">
+          <div style="padding:12px 14px;border-bottom:1px solid var(--line2)">
+            <div style="font-size:13px;font-weight:600">${esc(name)}</div>
+            <div style="font-size:12px;color:var(--ink3)">${esc(u.email)}</div>
+          </div>
+          <div data-act="signOut" style="padding:11px 14px;font-size:13px;font-weight:500;color:var(--warn);cursor:pointer">Sign out</div>
+        </div>` : ''}
+      </div>
     </div>
   </header>`;
 }

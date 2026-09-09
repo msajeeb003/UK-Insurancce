@@ -7,6 +7,7 @@ export const state = {
   projects: [],             // loaded from the server
   currentId: null,
   source: null,             // { caption, docId, page }
+  userMenu: false,          // avatar dropdown open?
   projSearch: '',
   projFilter: 'All',
 };
