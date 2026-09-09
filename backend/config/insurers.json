@@ -35,6 +35,7 @@
     "nexus": ["Nexus", "Nexus Trade Credit"],
     "aviva": ["Aviva"],
     "zurich": ["Zurich", "Zurich Insurance"],
-    "cartan": ["Cartan", "Cartan Trade"]
+    "cartan": ["Cartan", "Cartan Trade", "Cartan Trade UK",
+               "The Marine Insurance Company Limited", "Marine Insurance Company"]
   }
 }

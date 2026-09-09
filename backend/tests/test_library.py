@@ -24,10 +24,11 @@ def test_debt_rule_matches_document_wording_via_aliases():
     assert value == "Outsourced"
     assert matched == "QBE"
     assert match_insurer("Euler Hermes")["id"] == "allianz"
-    # The Marine Insurance Company Limited is an RSA Group entity, NOT on
-    # the standing list — it must stay unmatched (own column, Outsourced
-    # default) rather than being silently folded into another insurer.
-    assert match_insurer("THE MARINE INSURANCE COMPANY LIMITED") is None
+    # Cartan Trade UK is the Appointed Representative of The Marine
+    # Insurance Company Limited (RSA-owned capacity) — a quote issued on
+    # Marine paper is the brokerage's "Cartan" quote.
+    # Source: cartantrade.com/legal-notice, confirmed by the client.
+    assert match_insurer("THE MARINE INSURANCE COMPANY LIMITED")["id"] == "cartan"
 
 
 def test_debt_rule_unknown_insurer_defaults_outsourced():
