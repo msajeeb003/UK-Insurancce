@@ -2,7 +2,6 @@
    Every clickable element carries data-act; every editable one data-edit. */
 
 import { downloadExport, loadInsurerConfig, uploadFiles } from './api.js';
-import { loadDemoData } from './demo.js';
 import {
   boot, createProject, loadProjects, proj, save, setUser, state, touch, uid,
 } from './state.js';
@@ -60,16 +59,6 @@ const ACTIONS = {
   },
 
   pickFile(inputId) { document.getElementById(inputId).click(); },
-
-  loadDemo() {
-    const p = proj(); if (!p) return;
-    if (p.columns.length) {
-      alert('This project already has comparison columns. Demo data loads onto an empty project — create a new project first.');
-      return;
-    }
-    loadDemoData(p);
-    touch(p); render();
-  },
 
   toggleConfirm(k) { const p = proj(); p.confirmed[k] = !p.confirmed[k]; touch(p); render(); },
   pickRec(colId) {

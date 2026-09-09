@@ -349,10 +349,7 @@ function renderUpload(p) {
     <div class="card" style="overflow:hidden">
       <div style="padding:13px 18px;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;display:flex;justify-content:space-between;align-items:center">
         <span>Documents</span>
-        <div style="display:flex;align-items:center;gap:12px">
-          ${p.columns.length ? '' : `<button class="btn-soft" style="padding:6px 12px;font-size:12px" data-act="loadDemo">Load demo data</button>`}
-          <span class="mono" style="font-size:11px;font-weight:500;color:var(--ink3)">${p.files.length} file${p.files.length === 1 ? '' : 's'}${nErr ? ' · ' + nErr + ' unreadable' : ''}</span>
-        </div>
+        <span class="mono" style="font-size:11px;font-weight:500;color:var(--ink3)">${p.files.length} file${p.files.length === 1 ? '' : 's'}${nErr ? ' · ' + nErr + ' unreadable' : ''}</span>
       </div>
       ${filesHtml}
     </div>
@@ -441,7 +438,7 @@ function renderReview(p) {
         <thead><tr><th class="colhead-label">Field</th>${headCells}</tr></thead>
         <tbody>${bodyRows}</tbody>
       </table>`
-      : `<div style="padding:40px;text-align:center;color:var(--ink3);font-size:13.5px">No comparison columns yet — upload quotes on the previous step, or add a free-format column.<br><button class="btn-soft" style="margin-top:14px" data-act="loadDemo">Load demo data</button></div>`}
+      : `<div style="padding:40px;text-align:center;color:var(--ink3);font-size:13.5px">No comparison columns yet — upload quotes on the previous step, or add a free-format column.</div>`}
     </div>
     <div class="card" style="margin-top:16px;padding:16px 18px">
       <label style="display:block;font-size:12.5px;font-weight:600;color:var(--ink2);margin-bottom:8px">Free-format notes <span style="color:var(--ink3);font-weight:400">— appears beneath the comparison</span></label>
