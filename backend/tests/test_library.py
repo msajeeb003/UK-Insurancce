@@ -24,9 +24,10 @@ def test_debt_rule_matches_document_wording_via_aliases():
     assert value == "Outsourced"
     assert matched == "QBE"
     assert match_insurer("Euler Hermes")["id"] == "allianz"
-    # Zurich issues trade credit as The Marine Insurance Company Limited —
-    # its schedule must land on the Zurich column, not a separate one.
-    assert match_insurer("THE MARINE INSURANCE COMPANY LIMITED")["id"] == "zurich"
+    # The Marine Insurance Company Limited is an RSA Group entity, NOT on
+    # the standing list — it must stay unmatched (own column, Outsourced
+    # default) rather than being silently folded into another insurer.
+    assert match_insurer("THE MARINE INSURANCE COMPANY LIMITED") is None
 
 
 def test_debt_rule_unknown_insurer_defaults_outsourced():
