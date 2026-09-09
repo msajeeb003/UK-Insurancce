@@ -132,7 +132,7 @@ function renderTopbar() {
         <div style="font-size:13px;font-weight:500">${esc(name)}</div>
         <div style="font-size:11px;color:var(--ink3)">Underwriting desk</div>
       </div>
-      <div style="width:32px;height:32px;border-radius:50%;background:var(--set-soft);color:var(--set);display:grid;place-items:center;font-weight:600;font-size:13px">${esc(u.initials)}</div>
+      <div data-act="signOut" title="Sign out" style="width:32px;height:32px;border-radius:50%;background:var(--set-soft);color:var(--set);display:grid;place-items:center;font-weight:600;font-size:13px;cursor:pointer">${esc(u.initials)}</div>
     </div>
   </header>`;
 }
@@ -161,7 +161,9 @@ export function projectRowsHtml() {
       <span style="color:var(--ink2)">${esc(p.policyType)}</span>
       <span><span style="display:inline-block;font-size:12px;font-weight:500;padding:3px 10px;border-radius:20px;background:${bg};color:${fg}">${label}</span></span>
       <span style="color:var(--ink2);font-size:12.5px">${esc(p.updated)}</span>
-      <span class="mono" style="text-align:right;color:var(--ink3);font-size:11px;font-weight:500">${p.exported ? 'PPT · PDF' : '—'}</span>
+      <span class="mono" style="text-align:right;color:var(--ink3);font-size:11px;font-weight:500">${p.exported
+        ? `<a data-act="noopLink" href="/projects/${p.id}/exports/pptx" style="color:var(--accent);text-decoration:none">PPT</a> · <a data-act="noopLink" href="/projects/${p.id}/exports/pdf" style="color:var(--accent);text-decoration:none">PDF</a>`
+        : '—'}</span>
     </div>`;
   }).join('');
 }
@@ -404,7 +406,7 @@ function renderReview(p) {
           <div style="display:flex;align-items:center;gap:6px;padding:4px 8px">
             <input class="cell-input" data-edit="cell" data-col="${col.id}" data-field="${f.key}" value="${esc(cellValue(p, col, f))}" placeholder="—">
             ${cellUncertain(col, f) ? `<span class="mono" title="AI marked this value uncertain — verify against the source page (editing the cell clears the flag)" style="flex:none;font-size:10px;font-weight:500;color:var(--warn);background:#fff;border:1px solid var(--warn);border-radius:4px;padding:1px 5px;cursor:help">?</span>` : ''}
-            ${page ? `<button class="src-chip" data-act="openSource" data-arg="${esc(col.name)} quote · p${page}" title="Open source page">p${page}</button>` : ''}
+            ${page ? `<button class="src-chip" data-act="openSource" data-arg="${col.id}" data-arg2="${page}" title="Open source page">p${page}</button>` : ''}
           </div>
         </td>`;
       }).join('')}
@@ -637,10 +639,12 @@ function renderSourceModal() {
         </div>
         <span data-act="closeSource" style="cursor:pointer;color:var(--ink3);font-size:20px">×</span>
       </div>
-      <div style="padding:24px;background:var(--bg)">
-        <div style="aspect-ratio:1/1.3;background:repeating-linear-gradient(135deg,#eef1f5,#eef1f5 10px,#f6f8fa 10px,#f6f8fa 20px);border:1px solid var(--line);border-radius:6px;display:grid;place-items:center">
-          <div class="mono" style="text-align:center;font-size:12px;color:var(--ink3)">quote PDF preview<br>${esc(state.source.caption)}</div>
-        </div>
+      <div style="padding:24px;background:var(--bg);max-height:72vh;overflow:auto">
+        ${state.source.docId
+          ? `<img src="/documents/${esc(state.source.docId)}/page/${state.source.page}" alt="${esc(state.source.caption)}" style="width:100%;border:1px solid var(--line);border-radius:6px;background:#fff">`
+          : `<div style="aspect-ratio:1/1.3;background:repeating-linear-gradient(135deg,#eef1f5,#eef1f5 10px,#f6f8fa 10px,#f6f8fa 20px);border:1px solid var(--line);border-radius:6px;display:grid;place-items:center">
+          <div class="mono" style="text-align:center;font-size:12px;color:var(--ink3)">no stored page for this document<br>${esc(state.source.caption)}</div>
+        </div>`}
       </div>
     </div>
   </div>`;

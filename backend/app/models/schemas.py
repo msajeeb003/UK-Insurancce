@@ -247,6 +247,13 @@ class ProcessingMeta(BaseModel):
     page_count: int = Field(
         description="PDF pages, or worksheet count for an Excel schedule."
     )
+    document_id: str | None = Field(
+        default=None,
+        description=(
+            "Id of the retained copy when the upload was made inside a "
+            "project (BRD S4: documents retained; S5: source-page view)."
+        ),
+    )
     extraction_engine: Literal[
         "pymupdf", "azure_document_intelligence", "docling", "excel"
     ]

@@ -22,7 +22,10 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.auth import router as auth_router
+from app.api.projects import router as projects_router
 from app.api.routes import router
+from app.core.auth import seed_admin_if_empty
 from app.core.config import get_settings
 
 logging.basicConfig(
@@ -45,7 +48,15 @@ app = FastAPI(
 )
 
 app.include_router(router)
+app.include_router(auth_router)
+app.include_router(projects_router)
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="frontend")
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    # BRD 2.10: no self-registration — first user comes from the environment.
+    seed_admin_if_empty()
 
 # The frontend uses inline style attributes and Google Fonts; scripts are
 # strictly same-origin files (no inline handlers anywhere).

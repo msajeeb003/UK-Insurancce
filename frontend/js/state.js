@@ -1,26 +1,55 @@
-/* Application state + persistence (localStorage for projects,
-   sessionStorage for the signed-in user) and small shared utilities. */
+/* Application state, server persistence (BRD 2.9: projects are stored
+   server-side and shared by all users) and small shared utilities. */
 
 export const state = {
   screen: 'login',
   user: null,               // { email, initials }
-  projects: [],             // persisted
+  projects: [],             // loaded from the server
   currentId: null,
-  source: null,             // { caption }
+  source: null,             // { caption, docId, page }
   projSearch: '',
   projFilter: 'All',
 };
 
-export function load() {
-  try {
-    state.projects = JSON.parse(localStorage.getItem('qct_projects') || '[]');
-    const u = sessionStorage.getItem('qct_user');
-    if (u) { state.user = JSON.parse(u); state.screen = 'projects'; }
-  } catch (e) { /* fresh start on corrupt storage */ }
+export function setUser(email) {
+  const parts = email.split('@')[0].split(/[._-]/).filter(Boolean);
+  const initials = (parts.length > 1
+    ? parts[0][0] + parts[1][0] : email.slice(0, 2)).toUpperCase();
+  state.user = { email, initials };
 }
 
-export function save() {
-  try { localStorage.setItem('qct_projects', JSON.stringify(state.projects)); } catch (e) {}
+export async function loadProjects() {
+  const res = await fetch('/projects');
+  if (res.ok) state.projects = (await res.json()).projects || [];
+}
+
+/* Session restore on page load: an existing cookie session goes straight
+   to the project list (BRD S1: Next -> Project list). */
+export async function boot() {
+  try {
+    const me = await fetch('/auth/me');
+    if (me.ok) {
+      setUser((await me.json()).email);
+      await loadProjects();
+      state.screen = 'projects';
+    }
+  } catch (e) { /* server unreachable: stay on the login screen */ }
+}
+
+/* Debounced per-project save — every edit reaches the server without a
+   request per keystroke. */
+const saveTimers = {};
+export function save(p) {
+  p = p || proj();
+  if (!p) return;
+  clearTimeout(saveTimers[p.id]);
+  saveTimers[p.id] = setTimeout(() => {
+    fetch('/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: p.id, state: p }),
+    }).catch(() => {});
+  }, 500);
 }
 
 export const proj = () => state.projects.find(p => p.id === state.currentId) || null;

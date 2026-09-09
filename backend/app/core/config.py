@@ -53,6 +53,19 @@ class Settings(BaseSettings):
     # is routed to Azure OCR.
     scanned_page_ratio: float = 0.4
 
+    # ── Storage + authentication (BRD 2.9/2.10) ──────────────────────────
+    # SQLite database + uploaded documents + generated exports live here.
+    # Default: <repo>/data. Point DATA_DIR elsewhere (e.g. a mounted,
+    # encrypted volume) in production.
+    data_dir: str = ""
+    # First user, seeded on startup when the users table is empty —
+    # further users are added with `python -m app.manage`.
+    admin_email: str = ""
+    admin_password: SecretStr = SecretStr("")
+    session_ttl_hours: int = 72
+    # Set COOKIE_SECURE=true behind HTTPS in production.
+    cookie_secure: bool = False
+
     # ── Guard rails ──────────────────────────────────────────────────────
     max_upload_mb: int = 25
     # Documents longer than this are rejected before any paid API call —
@@ -66,6 +79,12 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @property
+    def data_path(self) -> Path:
+        if self.data_dir:
+            return Path(self.data_dir)
+        return Path(__file__).resolve().parents[3] / "data"
 
 
 @lru_cache

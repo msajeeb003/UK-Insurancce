@@ -121,6 +121,8 @@ export async function uploadFiles(kind, fileList) {
     try {
       const fd = new FormData();
       fd.append('file', f);
+      fd.append('project_id', p.id);   // BRD S4: documents retained
+      fd.append('doc_kind', kind);
       const res = await fetch('/extract-quote', { method: 'POST', body: fd });
       if (!res.ok) throw new Error(await readDetail(res));
       const body = await res.json();
@@ -144,6 +146,7 @@ function applyExtraction(p, entry, body, kind) {
   const review = body.review || { missing_fields: [], uncertain_fields: [] };
   const nCheck = review.uncertain_fields.length;
   entry.status = 'extracted';
+  entry.docId = body.meta.document_id || null;
   // When the document's entity wording maps to a different standing-list
   // insurer, say so on the file card so the broker can verify the match.
   const matchNote = matched && insurer
@@ -199,6 +202,7 @@ function applyExtraction(p, entry, body, kind) {
     existing.data = freshData;
     existing.debt = ruleDebt;
     existing.matched = matched;
+    existing.docId = entry.docId;
     existing.fileName = entry.name;
     entry.colId = existing.id;
     entry.meta += ' · updated existing column';
@@ -210,7 +214,7 @@ function applyExtraction(p, entry, body, kind) {
   const col = {
     id: uid(), name: colName,
     manual: false, expiring: kind === 'expiring',
-    fileName: entry.name, data: freshData,
+    fileName: entry.name, docId: entry.docId, data: freshData,
     debt: ruleDebt, matched,
   };
   if (kind === 'expiring') p.columns.unshift(col); else p.columns.push(col);
@@ -251,7 +255,8 @@ function buildPresentationPayload(p) {
 export async function downloadExport(format) {
   const p = proj(); if (!p) return false;
   try {
-    const res = await fetch('/generate-presentation?format=' + format, {
+    const res = await fetch('/generate-presentation?format=' + format
+      + '&project_id=' + encodeURIComponent(p.id), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(buildPresentationPayload(p)),

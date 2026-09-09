@@ -8,10 +8,23 @@ the server log only, never to the client.
 """
 
 import logging
+import re
+import secrets
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+)
 
+from app.core import db
+from app.core.auth import require_user
 from app.core.config import get_settings
 from app.core.errors import PipelineError
 from app.models.presentation import PresentationRequest
@@ -90,9 +103,50 @@ _EXPORT_BUILDERS = {
 }
 
 
-@router.post("/generate-presentation")
+def _store_document(project_id: str, kind: str, filename: str,
+                    file_bytes: bytes, page_count: int) -> str:
+    """Retain the uploaded document against the project (BRD S4/2.9)."""
+    doc_id = secrets.token_hex(12)
+    safe = re.sub(r"[^\w.\- ]", "_", filename)[-80:]
+    folder = get_settings().data_path / "projects" / project_id / "docs"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{doc_id}_{safe}"
+    path.write_bytes(file_bytes)
+    db.execute(
+        "INSERT INTO documents (id, project_id, kind, filename, stored_path, "
+        "page_count, uploaded) VALUES (?,?,?,?,?,?,?)",
+        (doc_id, project_id, kind, filename, str(path), page_count, db.now()),
+    )
+    return doc_id
+
+
+def _store_export(project_id: str, format: str, filename: str,
+                  content: bytes, extension: str) -> None:
+    """Keep the latest export downloadable from the project list (BRD S2).
+    Regenerating replaces the previous file — no versioning (BRD 2.8)."""
+    folder = get_settings().data_path / "projects" / project_id / "exports"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{format}.{extension}"
+    path.write_bytes(content)
+    db.execute(
+        "INSERT INTO exports (project_id, format, filename, stored_path, created) "
+        "VALUES (?,?,?,?,?) ON CONFLICT(project_id, format) DO UPDATE SET "
+        "filename=excluded.filename, stored_path=excluded.stored_path, "
+        "created=excluded.created",
+        (project_id, format, filename, str(path), db.now()),
+    )
+
+
+@router.post("/generate-presentation", dependencies=[Depends(require_user)])
 async def generate_presentation(
     request: PresentationRequest,
+    project_id: Annotated[
+        str | None,
+        Query(max_length=64, description=(
+            "When given, the generated file is also retained against this "
+            "project so it stays downloadable from the project list."
+        )),
+    ] = None,
     format: Annotated[
         ExportFormat,
         Query(description=(
@@ -125,6 +179,8 @@ async def generate_presentation(
         ) from exc
 
     filename = suggested_filename(request, extension)
+    if project_id:
+        _store_export(project_id, format, filename, content, extension)
     return Response(
         content=content,
         media_type=media_type,
@@ -166,12 +222,24 @@ async def _read_capped(file: UploadFile, max_bytes: int) -> bytes:
     return b"".join(chunks)
 
 
-@router.post("/extract-quote", response_model=ExtractionResponse)
+@router.post("/extract-quote", response_model=ExtractionResponse,
+             dependencies=[Depends(require_user)])
 async def extract_quote(
     file: Annotated[
         UploadFile,
         File(description="Insurer quote, credit-limit schedule or policy document (PDF/xlsx)"),
     ],
+    project_id: Annotated[
+        str | None,
+        Form(max_length=64, description=(
+            "Project to retain this document against (BRD S4). Without it "
+            "the document is extracted but not stored."
+        )),
+    ] = None,
+    doc_kind: Annotated[
+        Literal["quote", "limits", "expiring"] | None,
+        Form(description="Which upload slot the file came from."),
+    ] = None,
     engine: Annotated[
         EngineOverride,
         Query(
@@ -196,7 +264,13 @@ async def extract_quote(
 
     # ── Pipeline ─────────────────────────────────────────────────────────
     try:
-        return await run_extraction_pipeline(file_bytes, filename, engine, file_kind)
+        result = await run_extraction_pipeline(file_bytes, filename, engine, file_kind)
+        if project_id:
+            result.meta.document_id = _store_document(
+                project_id, doc_kind or "quote", filename,
+                file_bytes, result.meta.page_count,
+            )
+        return result
     except PipelineError as exc:
         raise _http_from_pipeline_error(
             exc, f"Extraction rejected for {filename}"

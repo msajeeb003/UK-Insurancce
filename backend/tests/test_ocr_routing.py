@@ -50,7 +50,8 @@ def test_scanned_pdf_uses_docling_via_api(sparse_pdf, sample_extraction, monkeyp
     monkeypatch.setattr(
         pipeline_mod, "extract_quote_fields", lambda text: sample_extraction
     )
-    client = TestClient(app)
+    from tests.conftest import sign_in
+    client = sign_in(TestClient(app))
     res = client.post(
         "/extract-quote",
         files={"file": ("scan.pdf", sparse_pdf, "application/pdf")},

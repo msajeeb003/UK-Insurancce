@@ -2,6 +2,7 @@
 the OpenAI step is monkeypatched so tests exercise everything around it."""
 
 import io
+import os
 
 import openpyxl
 import pymupdf
@@ -10,11 +11,42 @@ from fastapi.testclient import TestClient
 
 from app.models.schemas import BuyerCreditLimit, QuoteExtraction, SourcedValue
 
+TEST_USER = ("broker@test.local", "correct-horse-9")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_data_dir(tmp_path_factory):
+    """Point the SQLite database and file storage at a per-run temp dir."""
+    os.environ["DATA_DIR"] = str(tmp_path_factory.mktemp("data"))
+    from app.core.config import get_settings
+    get_settings.cache_clear()
+    yield
+
+
+@pytest.fixture
+def anon_client() -> TestClient:
+    """A client with no session — for testing the auth guard itself."""
+    from app.main import app
+    return TestClient(app)
+
+
+def sign_in(test_client: TestClient) -> TestClient:
+    """Ensure the shared test user exists and start a session."""
+    from app.core import auth, db
+    if not db.query_one("SELECT id FROM users WHERE email=?", (TEST_USER[0],)):
+        auth.create_user(*TEST_USER)
+    res = test_client.post(
+        "/auth/login", json={"email": TEST_USER[0], "password": TEST_USER[1]}
+    )
+    assert res.status_code == 200
+    return test_client
+
 
 @pytest.fixture
 def client() -> TestClient:
+    """A signed-in client (endpoints require a session — BRD 2.10)."""
     from app.main import app
-    return TestClient(app)
+    return sign_in(TestClient(app))
 
 
 def make_pdf(pages: list[list[str]]) -> bytes:

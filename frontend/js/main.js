@@ -3,20 +3,41 @@
 
 import { downloadExport, loadInsurerConfig, uploadFiles } from './api.js';
 import { loadDemoData } from './demo.js';
-import { createProject, load, proj, save, state, touch, uid } from './state.js';
+import {
+  boot, createProject, loadProjects, proj, save, setUser, state, touch, uid,
+} from './state.js';
 import { allConfirmed, projectRowsHtml, render } from './views.js';
 
 const ACTIONS = {
-  signIn() {
+  async signIn() {
     const email = (document.getElementById('login-email').value || '').trim();
+    const password = document.getElementById('login-pass').value || '';
     if (!email) { document.getElementById('login-email').focus(); return; }
-    const parts = email.split('@')[0].split(/[._-]/).filter(Boolean);
-    const initials = (parts.length > 1 ? parts[0][0] + parts[1][0] : email.slice(0, 2)).toUpperCase();
-    state.user = { email, initials };
-    try { sessionStorage.setItem('qct_user', JSON.stringify(state.user)); } catch (e) {}
+    try {
+      const res = await fetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) {
+        alert(res.status === 401
+          ? 'Wrong email or password.'
+          : 'Sign-in failed — try again.');
+        return;
+      }
+    } catch (e) { alert('Server unreachable — try again.'); return; }
+    setUser(email);
+    await loadProjects();
     state.screen = 'projects';
     render();
   },
+  async signOut() {
+    try { await fetch('/auth/logout', { method: 'POST' }); } catch (e) {}
+    state.user = null; state.projects = []; state.currentId = null;
+    state.screen = 'login';
+    render();
+  },
+  noopLink() { /* anchor handles itself (download); row click must not fire */ },
   toProjects() { state.screen = 'projects'; render(); },
   newProject() { createProject(); save(); state.screen = 'setup'; render(); },
   openProject(id) {
@@ -74,7 +95,16 @@ const ACTIONS = {
     p.files = p.files.filter(f => f.colId !== colId);
     touch(p); render();
   },
-  openSource(caption) { state.source = { caption }; render(); },
+  openSource(colId, page) {
+    const p = proj();
+    const col = p && p.columns.find(c => c.id === colId);
+    state.source = {
+      caption: (col ? col.name : 'document') + ' · p' + page,
+      docId: col ? col.docId : null,
+      page: Number(page) || 1,
+    };
+    render();
+  },
   closeSource() { state.source = null; render(); },
   modalCard() { /* click shield: stops card clicks reaching the overlay's closeSource */ },
 
@@ -208,6 +238,6 @@ document.addEventListener('drop', e => {
 });
 
 /* ── Boot ──────────────────────────────────────────────────────────── */
-load();
-render();
+render();                       // login screen paints immediately
+boot().then(render);            // an existing session goes to the list
 loadInsurerConfig();  // standing list + debt rule from config, not code
