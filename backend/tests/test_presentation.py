@@ -137,6 +137,22 @@ def test_pdf_mirrors_the_page_set():
     assert "Meridian Foods Ltd" in text
 
 
+def test_pdf_keeps_long_cell_values():
+    """Regression: fixed-height cells silently dropped long values (a real
+    'Waiting Period for Protracted Default' note vanished from the PDF).
+    Rows must grow (or the font shrink) so every reviewed value renders."""
+    long_note = ("Waiting Period for Protracted Default: Specified in the "
+                 "policy schedule as 6 months from the due date of the "
+                 "oldest unpaid invoice, subject to the terms of the policy.")
+    req = make_request()
+    for col in req.columns:
+        col.values["additional_info"] = long_note
+    doc = pymupdf.open(stream=build_pdf(req), filetype="pdf")
+    text = "\n".join(page.get_text() for page in doc)
+    doc.close()
+    assert "Waiting Period for Protracted Default" in text
+
+
 def test_pdf_omits_limits_page_when_none():
     doc = pymupdf.open(
         stream=build_pdf(make_request(credit_limits=[])), filetype="pdf"

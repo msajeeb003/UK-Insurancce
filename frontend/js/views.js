@@ -449,6 +449,16 @@ function renderReview(p) {
   </div>`;
 }
 
+/* Mirrors the server's Total row: sum of the parseable amounts. */
+function moneyTotal(vals) {
+  let total = 0, found = false;
+  for (const v of vals) {
+    const digits = String(v || '').replace(/[^\d]/g, '');
+    if (digits) { total += parseInt(digits, 10); found = true; }
+  }
+  return found ? '£' + total.toLocaleString('en-GB') : '';
+}
+
 /* ── S6 Credit limits ──────────────────────────────────────────────── */
 function renderLimits(p) {
   const th = (txt, extra) => `<th style="text-align:left;padding:12px 14px;font:500 11px 'IBM Plex Mono';letter-spacing:.4px;text-transform:uppercase;color:var(--ink3);background:var(--panel);border-bottom:1px solid var(--line);${extra || ''}">${txt}</th>`;
@@ -468,6 +478,15 @@ function renderLimits(p) {
       }).join('')}
       <td style="text-align:center;border-bottom:1px solid var(--line2)"><span data-act="removeCredit" data-arg="${r.id}" title="Remove buyer row" style="color:var(--ink3);cursor:pointer;font-size:16px">×</span></td>
     </tr>`).join('');
+  // The sample deck's Total row — computed, read-only, same as the export.
+  const totalRow = p.credit.length ? `
+    <tr style="background:var(--panel);font-weight:600">
+      <td style="padding:10px 14px;border-top:1px solid var(--line)">Total</td>
+      <td style="border-top:1px solid var(--line)"></td>
+      <td style="padding:10px 6px;border-top:1px solid var(--line)">${esc(moneyTotal(p.credit.map(r => r.req)))}</td>
+      ${p.columns.map(col => `<td style="padding:10px 6px;border-top:1px solid var(--line);border-left:1px solid var(--line2);background:${col.id === p.recommended ? 'var(--rec)' : 'transparent'}">${esc(moneyTotal(p.credit.map(r => r.offers[col.id])))}</td>`).join('')}
+      <td style="border-top:1px solid var(--line)"></td>
+    </tr>` : '';
   return `
   <div>
     <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:18px">
@@ -493,7 +512,7 @@ function renderLimits(p) {
           }).join('')}
           <th style="background:var(--panel);border-bottom:1px solid var(--line);width:40px"></th>
         </tr></thead>
-        <tbody>${rows || `<tr><td colspan="${4 + p.columns.length}" style="padding:34px;text-align:center;color:var(--ink3);font-size:13px">No buyer limits — extracted rows appear here, or add one manually.</td></tr>`}</tbody>
+        <tbody>${rows ? rows + totalRow : `<tr><td colspan="${4 + p.columns.length}" style="padding:34px;text-align:center;color:var(--ink3);font-size:13px">No buyer limits — extracted rows appear here, or add one manually.</td></tr>`}</tbody>
       </table>
     </div>
     <p style="font-size:12.5px;color:var(--ink2);margin:14px 2px 0">Around 90% of limits arrive as a separate schedule. This page is omitted cleanly from the presentation when no limits are supplied.</p>

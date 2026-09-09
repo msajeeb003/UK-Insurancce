@@ -147,6 +147,9 @@ document.addEventListener('change', e => {
         if (el.dataset.part === 'offer') row.offers[el.dataset.col] = v;
         else row[el.dataset.part] = v;
         touch(p);
+        // Change fires on blur, so re-rendering to refresh the computed
+        // Total row doesn't steal focus mid-edit.
+        render();
       }
       break;
     }

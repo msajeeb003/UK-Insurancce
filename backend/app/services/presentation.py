@@ -510,20 +510,64 @@ def _pdf_cover_accents(page, right=True):
         _pdf_accent(page, [(0, 0), (120, 0), (320, PAGE_H), (0, PAGE_H)], NAVY)
 
 
-def _pdf_table(page, x, y, widths, cells, row_h, *, font_size):
-    """cells: rows of (text, fill|None, bold, color) tuples."""
+def _cell_lines(text: str, width: float, font_size: float, bold: bool) -> int:
+    """Rough line count for a wrapped cell — used to size rows so
+    insert_textbox can never silently drop long values (BRD 2.2: every
+    reviewed value must reach the export)."""
+    text = _pdf_safe(text or "")
+    if not text:
+        return 1
+    avail = max(width - 10, 12) * 0.95  # padding + word-wrap slack
+    font = "hebo" if bold else "helv"
+    lines = 0
+    for para in text.split("\n"):
+        w = pymupdf.get_text_length(para, fontname=font, fontsize=font_size)
+        lines += max(1, -(-int(w) // int(avail)))
+    return lines
+
+
+def _pdf_table(page, x, y, widths, cells, *, font_size, min_row_h=22,
+               max_y=PAGE_H - 24):
+    """cells: rows of (text, fill|None, bold, color) tuples.
+
+    Row heights grow to fit wrapped text; if the table would overflow the
+    page, the font steps down until it fits. Returns the y below the table.
+    """
+    fs = font_size
+    while True:
+        heights = []
+        for row in cells:
+            h = float(min_row_h)
+            for c, (text, _fill, bold, _color) in enumerate(row):
+                n = _cell_lines(text, widths[c], fs, bold)
+                h = max(h, n * fs * 1.35 + 8)
+            heights.append(h)
+        if y + sum(heights) <= max_y or fs <= 6:
+            break
+        fs -= 0.5
+
+    cy = y
     for r, row in enumerate(cells):
         cx = x
         for c, (text, fill, bold, color) in enumerate(row):
-            rect = pymupdf.Rect(cx, y + r * row_h, cx + widths[c], y + (r + 1) * row_h)
+            rect = pymupdf.Rect(cx, cy, cx + widths[c], cy + heights[r])
             if fill is not None:
                 page.draw_rect(rect, color=None, fill=_norm(fill))
             page.draw_rect(rect, color=_norm(LINE), width=0.5)
-            page.insert_textbox(
-                rect + (4, 3, -4, -1), _pdf_safe(text), fontsize=font_size,
-                fontname="hebo" if bold else "helv", color=_norm(color),
-            )
+            # Shrink-to-fit last resort: insert_textbox writes nothing and
+            # returns a negative deficit when the text still doesn't fit.
+            tfs = fs
+            while tfs >= 5:
+                rc = page.insert_textbox(
+                    rect + (4, 3, -4, -1), _pdf_safe(text), fontsize=tfs,
+                    fontname="hebo" if bold else "helv", color=_norm(color),
+                )
+                if rc >= 0:
+                    break
+                tfs -= 0.5
             cx += widths[c]
+        cy += heights[r]
+    return cy
 
 
 def build_pdf(req: PresentationRequest) -> bytes:
@@ -578,10 +622,11 @@ def build_pdf(req: PresentationRequest) -> bytes:
             row.append((_cell_text(col.values.get(key)), _col_fill(req, col),
                         False, INK))
         body.append(row)
-    _pdf_table(page, MARGIN, 56, widths, [header] + body, 26, font_size=8)
+    end_y = _pdf_table(page, MARGIN, 56, widths, [header] + body,
+                       font_size=8, max_y=PAGE_H - 40)
     if req.notes.strip():
-        _pdf_text(page, MARGIN, 56 + 26 * (1 + len(PRESENTATION_ROWS)) + 8,
-                  852, 30, req.notes.strip(), size=8, color=INK2)
+        _pdf_text(page, MARGIN, end_y + 8, 852, 30, req.notes.strip(),
+                  size=8, color=INK2)
 
     # ── 5. Credit Limits (omitted cleanly when none) ─────────────────────
     if req.credit_limits:
@@ -607,8 +652,8 @@ def build_pdf(req: PresentationRequest) -> bytes:
                               _col_fill(req, col), False, INK))
             body.append(cells)
         total = [(t, PANEL, True, INK) for t in _limits_total_row(req)]
-        _pdf_table(page, MARGIN, 62, widths, [header] + body + [total], 24,
-                   font_size=8.5)
+        _pdf_table(page, MARGIN, 62, widths, [header] + body + [total],
+                   font_size=8.5, min_row_h=20)
 
     # ── 6. Demands & needs / recommendation ──────────────────────────────
     page = doc.new_page(width=PAGE_W, height=PAGE_H)
