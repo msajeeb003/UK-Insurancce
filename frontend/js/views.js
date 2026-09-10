@@ -48,13 +48,21 @@ export function gateReason(p, screenId) {
     return 'Complete Setup first — enter the client name.';
   }
   if (target <= 1) return null;                       // Upload needs only Setup
+  // Review and everything after it need a comparison to review.
   if (p.projectType === 'renewal' && !p.columns.some(c => c.expiring)) {
     return 'Renewal project — upload the expiring policy on the Upload step first (BRD: it is the comparison baseline).';
   }
   if (!p.columns.length) {
     return 'Upload at least one quote first — the comparison needs a column.';
   }
-  return null;                                        // BRD: ready when ready
+  if (target <= 2) return null;                       // Review is now reachable
+  // Credit limits, Recommendation and Generate need Review completed:
+  // the four key values confirmed (BRD 2.5). This is also why export is
+  // gated server-side — here it just keeps the wizard in order.
+  if (!allConfirmed(p)) {
+    return 'Complete Review first — confirm estimated annual premium, indemnity, excess and max annual liability.';
+  }
+  return null;
 }
 
 /* ── Shared fragments ────────────────────────────────────────────────── */
