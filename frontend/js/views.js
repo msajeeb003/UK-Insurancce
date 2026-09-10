@@ -48,17 +48,25 @@ export function gateReason(p, screenId) {
     return 'Complete Setup first — enter the client name.';
   }
   if (target <= 1) return null;                       // Upload needs only Setup
-  // Review and everything after it need a comparison to review.
+  // Review is reachable once ANY document has been extracted — a quote or
+  // a credit-limit schedule both count (a schedule makes no comparison
+  // column, so requiring a column here would trap a schedule-only upload).
+  // A manually added free-format column also counts.
+  const hasUpload = (p.files || []).some(f => f.status === 'extracted');
+  if (!hasUpload && !p.columns.length) {
+    return 'Upload at least one document first.';
+  }
+  if (target <= 2) return null;                       // Review is now reachable
+  // Credit limits, Recommendation and Generate need a real, confirmed
+  // comparison: at least one insurer column, the expiring policy for a
+  // renewal, and the four key values confirmed (BRD 2.5 — the same gate
+  // the server enforces on export).
   if (p.projectType === 'renewal' && !p.columns.some(c => c.expiring)) {
     return 'Renewal project — upload the expiring policy on the Upload step first (BRD: it is the comparison baseline).';
   }
   if (!p.columns.length) {
-    return 'Upload at least one quote first — the comparison needs a column.';
+    return 'Add at least one insurer quote before continuing — upload a quote, or add a free-format column on the Review step.';
   }
-  if (target <= 2) return null;                       // Review is now reachable
-  // Credit limits, Recommendation and Generate need Review completed:
-  // the four key values confirmed (BRD 2.5). This is also why export is
-  // gated server-side — here it just keeps the wizard in order.
   if (!allConfirmed(p)) {
     return 'Complete Review first — confirm estimated annual premium, indemnity, excess and max annual liability.';
   }
