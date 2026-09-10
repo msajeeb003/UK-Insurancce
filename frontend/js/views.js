@@ -40,6 +40,23 @@ function confirmLabel(k) {
   return { premium: 'Premium', indemnity: 'Indemnity', excess: 'Excess', maxLiability: 'Max liability' }[k];
 }
 
+/* ── Step gating (a step must be complete before the next one opens) ── */
+export function gateReason(p, screenId) {
+  const target = STEPS.findIndex(s => s[0] === screenId);
+  if (target <= 0) return null;                       // Setup is always open
+  if (!(p.clientName || '').trim()) {
+    return 'Complete Setup first — enter the client name.';
+  }
+  if (target <= 1) return null;                       // Upload needs only Setup
+  if (p.projectType === 'renewal' && !p.columns.some(c => c.expiring)) {
+    return 'Renewal project — upload the expiring policy on the Upload step first (BRD: it is the comparison baseline).';
+  }
+  if (!p.columns.length) {
+    return 'Upload at least one quote first — the comparison needs a column.';
+  }
+  return null;                                        // BRD: ready when ready
+}
+
 /* ── Shared fragments ────────────────────────────────────────────────── */
 function screenHeader(title, sub) {
   return `
@@ -207,19 +224,20 @@ function renderProjects() {
 }
 
 /* ── Stepper + wizard shell ────────────────────────────────────────── */
-function renderStepper() {
+function renderStepper(p) {
   const cur = STEPS.findIndex(s => s[0] === state.screen);
   return `
   <div style="background:var(--surface);border-bottom:1px solid var(--line);padding:20px 26px">
     <div style="max-width:960px;margin:0 auto;display:flex;align-items:center;overflow-x:auto">
       ${STEPS.map(([id, label], i) => {
         const st = i < cur ? 'done' : i === cur ? 'current' : 'todo';
+        const locked = i > cur && gateReason(p, id);
         const numBg = st === 'current' ? 'var(--accent)' : st === 'done' ? 'var(--accent-soft)' : '#fff';
         const numFg = st === 'current' ? '#fff' : st === 'done' ? 'var(--accent)' : 'var(--ink3)';
         const numBorder = st === 'current' ? 'var(--accent)' : st === 'done' ? 'var(--accent-soft)' : 'var(--line)';
         const shadow = st === 'current' ? '0 2px 8px rgba(79,70,229,.4)' : 'none';
         return (i > 0 ? `<span style="flex:1;min-width:16px;height:2px;background:${i <= cur ? 'var(--accent)' : 'var(--line)'};margin:0 10px"></span>` : '')
-        + `<div data-act="go" data-arg="${id}" style="display:flex;align-items:center;gap:9px;cursor:pointer;flex:none;white-space:nowrap">
+        + `<div data-act="go" data-arg="${id}" ${locked ? `title="${esc(locked)}"` : ''} style="display:flex;align-items:center;gap:9px;cursor:${locked ? 'not-allowed' : 'pointer'};flex:none;white-space:nowrap;opacity:${locked ? '.45' : '1'}">
             <span style="width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:12.5px;font-weight:700;background:${numBg};color:${numFg};border:1.5px solid ${numBorder};box-shadow:${shadow}">${st === 'done' ? '✓' : i + 1}</span>
             <span style="font-size:12.5px;font-weight:${st === 'current' ? 700 : 500};color:${st === 'todo' ? 'var(--ink3)' : 'var(--ink)'}">${label}</span>
           </div>`;
@@ -237,7 +255,7 @@ function renderWizard() {
   }[state.screen] || renderSetup;
   return `
   <div style="flex:1;min-height:0;display:flex;flex-direction:column">
-    ${renderStepper()}
+    ${renderStepper(p)}
     <main style="flex:1;min-height:0;overflow:auto">
       <div class="fade" style="max-width:1180px;margin:0 auto;padding:30px 26px 40px">${inner(p)}</div>
     </main>

@@ -5,7 +5,7 @@ import { downloadExport, loadInsurerConfig, uploadFiles } from './api.js';
 import {
   boot, createProject, loadProjects, proj, save, setUser, state, touch, uid,
 } from './state.js';
-import { allConfirmed, projectRowsHtml, render } from './views.js';
+import { allConfirmed, gateReason, projectRowsHtml, render } from './views.js';
 
 const ACTIONS = {
   async signIn() {
@@ -48,7 +48,13 @@ const ACTIONS = {
     render();
   },
   setFilter(f) { state.projFilter = f; render(); },
-  go(screen) { state.screen = screen; render(); },
+  go(screen) {
+    // A step must be complete before any later step opens.
+    const p = proj();
+    const reason = p ? gateReason(p, screen) : null;
+    if (reason) { alert(reason); return; }
+    state.screen = screen; render();
+  },
 
   setType(t) { const p = proj(); p.projectType = t; touch(p); render(); },
   setPolicy(pt) { const p = proj(); p.policyType = pt; touch(p); render(); },
