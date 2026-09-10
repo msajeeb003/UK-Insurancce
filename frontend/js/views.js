@@ -57,18 +57,20 @@ export function gateReason(p, screenId) {
     return 'Upload at least one document first.';
   }
   if (target <= 2) return null;                       // Review is now reachable
-  // Credit limits, Recommendation and Generate need a real, confirmed
-  // comparison: at least one insurer column, the expiring policy for a
-  // renewal, and the four key values confirmed (BRD 2.5 — the same gate
-  // the server enforces on export).
+  // Credit limits, Recommendation and Generate need a comparison to work
+  // on: at least one insurer column, and the expiring policy for a renewal.
   if (p.projectType === 'renewal' && !p.columns.some(c => c.expiring)) {
     return 'Renewal project — upload the expiring policy on the Upload step first (BRD: it is the comparison baseline).';
   }
   if (!p.columns.length) {
     return 'Add at least one insurer quote before continuing — upload a quote, or add a free-format column on the Review step.';
   }
-  if (!allConfirmed(p)) {
-    return 'Complete Review first — confirm estimated annual premium, indemnity, excess and max annual liability.';
+  // The four-value confirmation gate belongs on EXPORT only (BRD 2.5:
+  // "Export stays disabled until confirmed"). Credit limits and
+  // Recommendation are reachable without it; only Generate needs it — and
+  // the server enforces the same gate on the export request.
+  if (screenId === 'export' && !allConfirmed(p)) {
+    return 'Confirm the four key values on the Review step before generating — estimated annual premium, indemnity, excess and max annual liability.';
   }
   return null;
 }
@@ -106,7 +108,34 @@ export function render() {
       + '</div>';
   }
   html += renderSourceModal();
+  html += renderNotice();
   app.innerHTML = html;
+}
+
+/* Themed replacement for the browser's alert() — matches the app font
+   and colours instead of the plain grey browser dialog. */
+export function notify(message) {
+  state.notice = message;
+  render();
+}
+
+function renderNotice() {
+  if (!state.notice) return '';
+  return `
+  <div class="modal-overlay" data-act="dismissNotice">
+    <div data-act="modalCard" style="width:420px;max-width:calc(100% - 40px);background:var(--surface);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div style="padding:22px 24px 6px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div class="logo-mark" style="width:26px;height:26px;font-size:13px;border-radius:7px">U</div>
+          <span style="font-weight:600;font-size:14px">UK Insurance</span>
+        </div>
+        <div style="font-size:13.5px;line-height:1.6;color:var(--ink2)">${esc(state.notice).replace(/\n/g, '<br>')}</div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;padding:14px 20px 18px">
+        <button class="btn btn-primary" data-act="dismissNotice" style="padding:9px 24px">OK</button>
+      </div>
+    </div>
+  </div>`;
 }
 
 /* ── S1 Login ──────────────────────────────────────────────────────── */

@@ -5,7 +5,7 @@ import {
   CONFIRM_FIELD_MAP, DOC_TYPE_LABELS, FIELDS, INSURERS, MAX_QUOTES, setInsurers,
 } from './constants.js';
 import { proj, state, touch, uid } from './state.js';
-import { cellValue, render } from './views.js';
+import { cellValue, notify, render } from './views.js';
 
 /* ── Standing insurer list (configuration, not code) ─────────────────── */
 export async function loadInsurerConfig() {
@@ -81,10 +81,9 @@ async function readDetail(res) {
 
 /* Session gone (expired, or the server was redeployed): back to sign-in. */
 function sessionExpired() {
-  alert('Your session has expired — please sign in again.');
   state.user = null;
   state.screen = 'login';
-  render();
+  notify('Your session has expired — please sign in again.');
 }
 
 /* ── Upload -> POST /extract-quote ───────────────────────────────────── */
@@ -104,7 +103,7 @@ export async function uploadFiles(kind, fileList) {
       !(e.kind === kind && e.name === f.name && e.status === 'error'));
   }
   if (skipped.length) {
-    alert('Already uploaded — skipped:\n· ' + skipped.join('\n· ') +
+    notify('Already uploaded — skipped:\n· ' + skipped.join('\n· ') +
       '\n\nTo replace a quote with a new version, upload the newer file: ' +
       'its insurer column is updated in place, never duplicated.');
     if (!files.length) { render(); return; }
@@ -114,7 +113,7 @@ export async function uploadFiles(kind, fileList) {
     const room = MAX_QUOTES - p.files.filter(
       f => f.kind === 'quote' && f.status !== 'error').length;
     if (files.length > room) {
-      alert(`Up to ${MAX_QUOTES} quotes per project — ${Math.max(room, 0)} more can be added.`);
+      notify(`Up to ${MAX_QUOTES} quotes per project — ${Math.max(room, 0)} more can be added.`);
       files = files.slice(0, Math.max(room, 0));
     }
   }
@@ -278,7 +277,7 @@ export async function downloadExport(format) {
     });
     if (res.status === 401) { sessionExpired(); return false; }
     if (!res.ok) {
-      alert('Export failed: ' + await readDetail(res));
+      notify('Export failed: ' + await readDetail(res));
       return false;
     }
     const blob = await res.blob();
@@ -293,7 +292,7 @@ export async function downloadExport(format) {
     URL.revokeObjectURL(link.href);
     return true;
   } catch (err) {
-    alert('Export failed: ' + (err.message || 'network error'));
+    notify('Export failed: ' + (err.message || 'network error'));
     return false;
   }
 }

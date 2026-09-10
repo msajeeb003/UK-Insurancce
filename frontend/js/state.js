@@ -8,6 +8,7 @@ export const state = {
   currentId: null,
   source: null,             // { caption, docId, page }
   userMenu: false,          // avatar dropdown open?
+  notice: null,             // themed message dialog text (replaces alert())
   projSearch: '',
   projFilter: 'All',
 };

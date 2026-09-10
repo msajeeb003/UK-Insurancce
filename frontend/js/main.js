@@ -5,7 +5,7 @@ import { downloadExport, loadInsurerConfig, uploadFiles } from './api.js';
 import {
   boot, createProject, loadProjects, proj, save, setUser, state, touch, uid,
 } from './state.js';
-import { allConfirmed, gateReason, projectRowsHtml, render } from './views.js';
+import { allConfirmed, gateReason, notify, projectRowsHtml, render } from './views.js';
 
 const ACTIONS = {
   async signIn() {
@@ -19,12 +19,12 @@ const ACTIONS = {
         body: JSON.stringify({ email, password }),
       });
       if (!res.ok) {
-        alert(res.status === 401
+        notify(res.status === 401
           ? 'Wrong email or password.'
           : 'Sign-in failed — try again.');
         return;
       }
-    } catch (e) { alert('Server unreachable — try again.'); return; }
+    } catch (e) { notify('Server unreachable — try again.'); return; }
     setUser(email);
     await loadProjects();
     state.screen = 'projects';
@@ -52,9 +52,10 @@ const ACTIONS = {
     // A step must be complete before any later step opens.
     const p = proj();
     const reason = p ? gateReason(p, screen) : null;
-    if (reason) { alert(reason); return; }
+    if (reason) { notify(reason); return; }
     state.screen = screen; render();
   },
+  dismissNotice() { state.notice = null; render(); },
 
   setType(t) { const p = proj(); p.projectType = t; touch(p); render(); },
   setPolicy(pt) { const p = proj(); p.policyType = pt; touch(p); render(); },
