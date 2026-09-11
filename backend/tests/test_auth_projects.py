@@ -51,6 +51,47 @@ def test_project_save_list_delete(client):
     assert not any(p["id"] == "p-test-1" for p in listed)
 
 
+def test_execute_transaction_is_atomic(client):
+    """A multi-statement write rolls back entirely if any statement fails —
+    a project deletion (BRD 2.11) can never land half-applied."""
+    import sqlite3
+
+    import pytest
+
+    from app.core import db
+
+    db.execute(
+        "INSERT INTO projects (id, client_name, updated, state) VALUES (?,?,?,?)",
+        ("tx-1", "Original", db.now(), "{}"),
+    )
+    with pytest.raises(sqlite3.Error):
+        db.execute_transaction([
+            ("UPDATE projects SET client_name='Changed' WHERE id=?", ("tx-1",)),
+            ("DELETE FROM no_such_table WHERE x=?", (1,)),  # fails -> rollback
+        ])
+    row = db.query_one("SELECT client_name FROM projects WHERE id=?", ("tx-1",))
+    assert row["client_name"] == "Original"   # first UPDATE was rolled back
+    db.execute("DELETE FROM projects WHERE id=?", ("tx-1",))
+
+
+def test_delete_removes_documents_and_exports(client):
+    """delete_project clears the project, its documents and its exports."""
+    from app.core import db
+
+    db.execute("INSERT INTO projects (id, client_name, updated, state) VALUES (?,?,?,?)",
+               ("del-1", "X", db.now(), "{}"))
+    db.execute("INSERT INTO documents (id, project_id, kind, filename, stored_path, "
+               "page_count, uploaded) VALUES (?,?,?,?,?,?,?)",
+               ("doc-1", "del-1", "quote", "q.pdf", "/x", 1, db.now()))
+    db.execute("INSERT INTO exports (project_id, format, filename, stored_path, created) "
+               "VALUES (?,?,?,?,?)", ("del-1", "pdf", "d.pdf", "/x", db.now()))
+
+    assert client.delete("/projects/del-1").status_code == 200
+    assert db.query_one("SELECT id FROM projects WHERE id=?", ("del-1",)) is None
+    assert db.query_one("SELECT id FROM documents WHERE project_id=?", ("del-1",)) is None
+    assert db.query_one("SELECT format FROM exports WHERE project_id=?", ("del-1",)) is None
+
+
 def test_export_is_retained_and_downloadable(client):
     payload = make_request().model_dump()
     res = client.post(

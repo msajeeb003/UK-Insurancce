@@ -6,6 +6,16 @@ One database file at <DATA_DIR>/app.db. SQLite fits the BRD's scale
 (three to four internal users): no database server to run, and backing
 up the deployment is copying the data directory. A single shared
 connection is serialised with a lock; every statement commits.
+
+Concurrency notes (why this stays a single locked connection rather than
+one connection per thread): SQLite allows only one writer at a time, so
+serialising writes in-process with the lock is what AVOIDS "database is
+locked" errors — it does not cause them. At the BRD's scale each
+statement is a sub-millisecond write, and the lock is never held across
+an LLM call (extraction finishes before anything is stored), so there is
+no request-blocking to fix. `busy_timeout` covers the one case the
+in-process lock cannot: a second process (the `app.manage` CLI) touching
+the same file while the server runs.
 """
 
 import sqlite3
@@ -67,6 +77,10 @@ def _connect() -> sqlite3.Connection:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
+        # Wait up to 5s for another process (e.g. the manage.py CLI) to
+        # release the write lock instead of failing immediately with
+        # SQLITE_BUSY.
+        conn.execute("PRAGMA busy_timeout=5000")
         conn.executescript(SCHEMA)
         _conn, _conn_path = conn, path
     return _conn
@@ -77,6 +91,25 @@ def execute(sql: str, params: tuple = ()) -> None:
         conn = _connect()
         conn.execute(sql, params)
         conn.commit()
+
+
+def execute_transaction(statements: list[tuple[str, tuple]]) -> None:
+    """Run several writes as ONE atomic transaction — either all of them
+    commit, or none do. Use it wherever a single logical change spans more
+    than one statement (e.g. deleting a project together with its
+    documents and exports, BRD 2.11): a crash midway can no longer leave
+    the database half-updated. Python's sqlite3 opens a transaction before
+    the first write and holds it until commit(), so the whole list lands
+    atomically; any error rolls the batch back."""
+    with _lock:
+        conn = _connect()
+        try:
+            for sql, params in statements:
+                conn.execute(sql, params)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def query(sql: str, params: tuple = ()) -> list[sqlite3.Row]:

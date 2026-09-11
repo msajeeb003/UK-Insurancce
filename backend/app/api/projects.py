@@ -52,10 +52,13 @@ def save_project(body: ProjectState) -> dict:
 @router.delete("/projects/{project_id}")
 def delete_project(project_id: str) -> dict:
     """Deletion on request (BRD 2.11 retention): removes the project, its
-    retained documents and its generated exports."""
-    db.execute("DELETE FROM documents WHERE project_id=?", (project_id,))
-    db.execute("DELETE FROM exports WHERE project_id=?", (project_id,))
-    db.execute("DELETE FROM projects WHERE id=?", (project_id,))
+    retained documents and its generated exports — atomically, so a crash
+    midway can never leave a half-deleted project behind."""
+    db.execute_transaction([
+        ("DELETE FROM documents WHERE project_id=?", (project_id,)),
+        ("DELETE FROM exports WHERE project_id=?", (project_id,)),
+        ("DELETE FROM projects WHERE id=?", (project_id,)),
+    ])
     folder = get_settings().data_path / "projects" / project_id
     shutil.rmtree(folder, ignore_errors=True)
     return {"ok": True}
