@@ -74,7 +74,11 @@ def download_export(project_id: str, format: str) -> Response:
     if row is None:
         raise HTTPException(status_code=404, detail="No export generated yet.")
     try:
-        content = open(row["stored_path"], "rb").read()
+        # `with` guarantees the handle is closed even if read() raises —
+        # on Windows an un-closed handle keeps the file locked, which would
+        # then block the next export (regeneration overwrites this path).
+        with open(row["stored_path"], "rb") as f:
+            content = f.read()
     except OSError as exc:
         raise HTTPException(status_code=404, detail="Export file missing.") from exc
     media = {
