@@ -4,6 +4,7 @@
 export const state = {
   screen: 'login',
   user: null,               // { email, initials }
+  csrf: '',                 // CSRF token, echoed in X-CSRF-Token on writes
   projects: [],             // loaded from the server
   currentId: null,
   source: null,             // { caption, docId, page }
@@ -31,11 +32,18 @@ export async function boot() {
   try {
     const me = await fetch('/auth/me');
     if (me.ok) {
-      setUser((await me.json()).email);
+      const body = await me.json();
+      setUser(body.email);
+      state.csrf = body.csrf_token || '';   // recover the CSRF token on reload
       await loadProjects();
       state.screen = 'projects';
     }
   } catch (e) { /* server unreachable: stay on the login screen */ }
+}
+
+/* Headers for state-changing requests: the CSRF token the backend expects. */
+export function csrfHeaders() {
+  return state.csrf ? { 'X-CSRF-Token': state.csrf } : {};
 }
 
 /* Debounced per-project save — every edit reaches the server without a
@@ -48,7 +56,7 @@ export function save(p) {
   saveTimers[p.id] = setTimeout(() => {
     fetch('/projects', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
       body: JSON.stringify({ id: p.id, state: p }),
     }).catch(() => {});
   }, 500);

@@ -18,16 +18,20 @@ class LoginRequest(BaseModel):
 
 @router.post("/login")
 def login(body: LoginRequest, response: Response) -> dict:
-    token = auth.login(body.email, body.password)
-    if token is None:
+    result = auth.login(body.email, body.password)
+    if result is None:
         raise HTTPException(status_code=401, detail="Wrong email or password.")
+    token, csrf = result
     response.set_cookie(
         auth.COOKIE_NAME, token,
         httponly=True, samesite="lax",
         secure=get_settings().cookie_secure,
         max_age=get_settings().session_ttl_hours * 3600,
     )
-    return {"ok": True}
+    # The CSRF token is deliberately NOT a cookie — the frontend keeps it in
+    # memory and echoes it in the X-CSRF-Token header, which a cross-site
+    # attacker cannot read or set.
+    return {"ok": True, "csrf_token": csrf}
 
 
 @router.post("/logout")
@@ -40,5 +44,12 @@ def logout(response: Response,
 
 
 @router.get("/me")
-def me(user: Annotated[dict, Depends(auth.require_user)]) -> dict:
-    return {"email": user["email"], "name": user["name"]}
+def me(user: Annotated[dict, Depends(auth.require_user)],
+       qct_session: str | None = Cookie(default=None)) -> dict:
+    # Return the CSRF token too, so a page reload on an existing session can
+    # recover it without re-logging in.
+    return {
+        "email": user["email"],
+        "name": user["name"],
+        "csrf_token": auth.csrf_token_for(qct_session) or "",
+    }

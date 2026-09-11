@@ -21,6 +21,39 @@ def test_wrong_password_rejected(anon_client):
     assert res.status_code == 401
 
 
+def test_csrf_required_on_writes(client):
+    """A logged-in write without the X-CSRF-Token header is rejected (403);
+    with the correct token it succeeds. Login itself is exempt."""
+    from tests.test_presentation import make_request
+
+    payload = make_request().model_dump()
+    good = client.headers["X-CSRF-Token"]
+
+    # Missing header -> 403
+    res = client.post("/generate-presentation?format=pptx", json=payload,
+                      headers={"X-CSRF-Token": ""})
+    assert res.status_code == 403
+    # Wrong header -> 403
+    res = client.post("/generate-presentation?format=pptx", json=payload,
+                      headers={"X-CSRF-Token": "not-the-real-token"})
+    assert res.status_code == 403
+    # Correct header (the fixture's default) -> allowed
+    res = client.post("/generate-presentation?format=pptx", json=payload)
+    assert res.status_code == 200
+    assert good  # sanity: a real token was issued
+
+
+def test_login_returns_csrf_token(anon_client):
+    from app.core import auth, db
+    from tests.conftest import TEST_USER
+    if not db.query_one("SELECT id FROM users WHERE email=?", (TEST_USER[0],)):
+        auth.create_user(*TEST_USER)
+    res = anon_client.post("/auth/login",
+                           json={"email": TEST_USER[0], "password": TEST_USER[1]})
+    assert res.status_code == 200
+    assert len(res.json()["csrf_token"]) > 20      # a real random token
+
+
 def test_login_me_logout_roundtrip(client):
     me = client.get("/auth/me")
     assert me.status_code == 200

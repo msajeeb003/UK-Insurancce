@@ -14,6 +14,7 @@ Endpoints (see app/api/routes.py):
 
 import asyncio
 import logging
+import secrets
 import threading
 import time
 from collections import deque
@@ -26,7 +27,8 @@ from fastapi.staticfiles import StaticFiles
 from app.api.auth import router as auth_router
 from app.api.projects import router as projects_router
 from app.api.routes import router
-from app.core.auth import delete_expired_sessions, seed_admin_if_empty
+from app.core import auth as auth_core
+from app.core.auth import COOKIE_NAME, delete_expired_sessions, seed_admin_if_empty
 from app.core.config import get_settings
 
 logging.basicConfig(
@@ -107,6 +109,36 @@ async def security_headers(request: Request, call_next) -> Response:
     if request.url.path == "/" or request.url.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-cache"
     return response
+
+
+# ── CSRF protection ──────────────────────────────────────────────────────
+# Defence-in-depth on top of the SameSite=Lax cookie. State-changing
+# requests must carry an X-CSRF-Token header matching the token bound to
+# the session. A cross-site attacker's page cannot read the token (it lives
+# in the app's JS memory, protected by the same-origin policy) nor set a
+# custom header on a simple form post, so a forged request is rejected.
+_CSRF_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+# Login has no session/token yet; logout is a harmless CSRF target and
+# exempting it avoids locking out a pre-upgrade session.
+_CSRF_EXEMPT = {"/auth/login", "/auth/logout"}
+
+
+@app.middleware("http")
+async def csrf_protect(request: Request, call_next) -> Response:
+    if request.method in _CSRF_METHODS and request.url.path not in _CSRF_EXEMPT:
+        cookie = request.cookies.get(COOKIE_NAME)
+        # Only enforce when a session cookie is actually present — an
+        # unauthenticated request carries no cookie to abuse and is left to
+        # the endpoint's own auth check (401).
+        if cookie:
+            expected = auth_core.csrf_token_for(cookie)
+            supplied = request.headers.get("X-CSRF-Token")
+            if not expected or not supplied or not secrets.compare_digest(supplied, expected):
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "CSRF check failed — please sign in again."},
+                )
+    return await call_next(request)
 
 
 # ── Rate limiting (paid/heavy POST endpoints only) ───────────────────────

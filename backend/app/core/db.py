@@ -90,6 +90,10 @@ CREATE TABLE IF NOT EXISTS exports (
 MIGRATIONS: list[tuple[int, str]] = [
     (1, SCHEMA),
     (2, "ALTER TABLE projects ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''"),
+    # v3: per-session CSRF token. Existing sessions get '' and so fail the
+    # CSRF check on their next state-changing request — the broker simply
+    # signs in again and gets a fresh token.
+    (3, "ALTER TABLE sessions ADD COLUMN csrf_token TEXT NOT NULL DEFAULT ''"),
 ]
 
 

@@ -39,6 +39,9 @@ def sign_in(test_client: TestClient) -> TestClient:
         "/auth/login", json={"email": TEST_USER[0], "password": TEST_USER[1]}
     )
     assert res.status_code == 200
+    # Send the session's CSRF token on every subsequent write, as the real
+    # frontend does (X-CSRF-Token header).
+    test_client.headers["X-CSRF-Token"] = res.json()["csrf_token"]
     return test_client
 
 

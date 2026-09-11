@@ -71,23 +71,29 @@ def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def start_session(user_id: int) -> str:
+def start_session(user_id: int) -> tuple[str, str]:
+    """Create a session. Returns (session_token, csrf_token): the session
+    token goes into the HttpOnly cookie; the CSRF token is handed to the
+    frontend to echo back in the X-CSRF-Token header on state-changing
+    requests (double-submit protection against cross-site forgery)."""
     token = secrets.token_urlsafe(32)
+    csrf = secrets.token_urlsafe(32)
     ttl = get_settings().session_ttl_hours * 3600
     db.execute(
-        "INSERT INTO sessions (token_hash, user_id, expires) VALUES (?,?,?)",
-        (_token_hash(token), user_id, db.now() + ttl),
+        "INSERT INTO sessions (token_hash, user_id, expires, csrf_token) "
+        "VALUES (?,?,?,?)",
+        (_token_hash(token), user_id, db.now() + ttl, csrf),
     )
-    return token
+    return token, csrf
 
 
 def end_session(token: str) -> None:
     db.execute("DELETE FROM sessions WHERE token_hash=?", (_token_hash(token),))
 
 
-def login(email: str, password: str) -> str | None:
-    """Returns a session token, or None on bad credentials (one message
-    for both wrong email and wrong password — no account probing)."""
+def login(email: str, password: str) -> tuple[str, str] | None:
+    """Returns (session_token, csrf_token), or None on bad credentials (one
+    message for both wrong email and wrong password — no account probing)."""
     row = db.query_one(
         "SELECT id, password_hash FROM users WHERE email=?",
         (email.strip().lower(),),
@@ -95,6 +101,18 @@ def login(email: str, password: str) -> str | None:
     if row is None or not verify_password(password, row["password_hash"]):
         return None
     return start_session(row["id"])
+
+
+def csrf_token_for(token: str | None) -> str | None:
+    """The CSRF token bound to a live session, or None if the session is
+    missing/expired. The middleware compares this against X-CSRF-Token."""
+    if not token:
+        return None
+    row = db.query_one(
+        "SELECT csrf_token FROM sessions WHERE token_hash=? AND expires > ?",
+        (_token_hash(token), db.now()),
+    )
+    return row["csrf_token"] if row else None
 
 
 def user_for_token(token: str | None) -> dict | None:

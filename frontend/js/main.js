@@ -24,6 +24,7 @@ const ACTIONS = {
           : 'Sign-in failed — try again.');
         return;
       }
+      state.csrf = (await res.json()).csrf_token || '';
     } catch (e) { notify('Server unreachable — try again.'); return; }
     setUser(email);
     await loadProjects();
@@ -34,6 +35,7 @@ const ACTIONS = {
   async signOut() {
     try { await fetch('/auth/logout', { method: 'POST' }); } catch (e) {}
     state.user = null; state.projects = []; state.currentId = null;
+    state.csrf = '';
     state.userMenu = false;
     state.screen = 'login';
     render();

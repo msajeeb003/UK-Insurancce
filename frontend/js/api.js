@@ -4,7 +4,7 @@
 import {
   CONFIRM_FIELD_MAP, DOC_TYPE_LABELS, FIELDS, INSURERS, MAX_QUOTES, setInsurers,
 } from './constants.js';
-import { proj, state, touch, uid } from './state.js';
+import { csrfHeaders, proj, state, touch, uid } from './state.js';
 import { cellValue, notify, render } from './views.js';
 
 /* ── Standing insurer list (configuration, not code) ─────────────────── */
@@ -130,8 +130,10 @@ export async function uploadFiles(kind, fileList) {
       fd.append('file', f);
       fd.append('project_id', p.id);   // BRD S4: documents retained
       fd.append('doc_kind', kind);
-      const res = await fetch('/extract-quote', { method: 'POST', body: fd });
-      if (res.status === 401) {
+      const res = await fetch('/extract-quote', {
+        method: 'POST', body: fd, headers: { ...csrfHeaders() },
+      });
+      if (res.status === 401 || res.status === 403) {
         // Session expired mid-work (e.g. a redeploy): back to sign-in —
         // the document is fine, so drop the card instead of flagging it.
         p.files = p.files.filter(e => e.id !== entry.id);
@@ -272,10 +274,10 @@ export async function downloadExport(format) {
     const res = await fetch('/generate-presentation?format=' + format
       + '&project_id=' + encodeURIComponent(p.id), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
       body: JSON.stringify(buildPresentationPayload(p)),
     });
-    if (res.status === 401) { sessionExpired(); return false; }
+    if (res.status === 401 || res.status === 403) { sessionExpired(); return false; }
     if (!res.ok) {
       notify('Export failed: ' + await readDetail(res));
       return false;
