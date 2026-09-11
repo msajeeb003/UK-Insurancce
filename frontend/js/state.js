@@ -139,7 +139,20 @@ export function save(p) {
 
 export const proj = () => state.projects.find(p => p.id === state.currentId) || null;
 
-export const uid = () => Math.random().toString(36).slice(2, 9);
+/* Collision-resistant id. A project's uid becomes its server-side primary
+   key (INSERT ... ON CONFLICT(id) DO UPDATE), so a clash would silently
+   overwrite another project — Math.random()'s ~7 chars was not safe.
+   crypto.randomUUID needs a secure context (https / localhost, both true
+   here); getRandomValues covers the rest; Math.random is a last resort. */
+export function uid() {
+  const c = globalThis.crypto;
+  if (c && c.randomUUID) return c.randomUUID();
+  if (c && c.getRandomValues) {
+    return Array.from(c.getRandomValues(new Uint32Array(4)),
+      x => x.toString(16).padStart(8, '0')).join('');
+  }
+  return 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+}
 
 export const esc = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
