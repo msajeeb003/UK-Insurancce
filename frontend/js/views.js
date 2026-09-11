@@ -96,20 +96,27 @@ function removeX(colId, title) {
 
 /* ═══════════════════════════ RENDERERS ═════════════════════════════ */
 
+let lastScreen = null;
+
 export function render() {
   const app = document.getElementById('app');
+  // The entrance fade must play only on a real screen change — otherwise it
+  // replays on every in-place re-render (a confirm click, a cell edit) and
+  // the whole content area blinks.
+  const animate = state.screen !== lastScreen;
   let html = '';
   if (state.screen === 'login') {
     html = renderLogin();
   } else {
     html = '<div style="height:100vh;display:flex;flex-direction:column;overflow:hidden">'
       + renderTopbar()
-      + (state.screen === 'projects' ? renderProjects() : renderWizard())
+      + (state.screen === 'projects' ? renderProjects(animate) : renderWizard(animate))
       + '</div>';
   }
   html += renderSourceModal();
   html += renderNotice();
   app.innerHTML = html;
+  lastScreen = state.screen;
 }
 
 /* Themed replacement for the browser's alert() — matches the app font
@@ -240,11 +247,11 @@ export function projectRowsHtml() {
   }).join('');
 }
 
-function renderProjects() {
+function renderProjects(animate) {
   const filters = ['All', 'New business', 'Renewal'].map(f => `
     <span data-act="setFilter" data-arg="${f}" style="font-size:12.5px;padding:9px 13px;background:var(--surface);border:1px solid var(--line);border-radius:9px;cursor:pointer;color:${state.projFilter === f ? 'var(--ink)' : 'var(--ink2)'};font-weight:${state.projFilter === f ? '500' : '400'}">${f}</span>`).join('');
   return `
-  <main class="fade" style="flex:1;min-height:0;overflow:auto;padding:34px 26px 60px"><div style="max-width:1100px;width:100%;margin:0 auto">
+  <main class="${animate ? 'fade' : ''}" style="flex:1;min-height:0;overflow:auto;padding:34px 26px 60px"><div style="max-width:1100px;width:100%;margin:0 auto">
     <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:22px">
       <div>
         <h1 style="font-size:27px;margin:0 0 6px;font-weight:700;letter-spacing:-.5px">Projects</h1>
@@ -291,9 +298,9 @@ function renderStepper(p) {
   </div>`;
 }
 
-function renderWizard() {
+function renderWizard(animate) {
   const p = proj();
-  if (!p) { state.screen = 'projects'; return renderProjects(); }
+  if (!p) { state.screen = 'projects'; return renderProjects(animate); }
   const inner = {
     setup: renderSetup, upload: renderUpload, review: renderReview,
     limits: renderLimits, recommend: renderRecommend, export: renderExport,
@@ -302,7 +309,7 @@ function renderWizard() {
   <div style="flex:1;min-height:0;display:flex;flex-direction:column">
     ${renderStepper(p)}
     <main style="flex:1;min-height:0;overflow:auto">
-      <div class="fade" style="max-width:1180px;margin:0 auto;padding:30px 26px 40px">${inner(p)}</div>
+      <div class="${animate ? 'fade' : ''}" style="max-width:1180px;margin:0 auto;padding:30px 26px 40px">${inner(p)}</div>
     </main>
   </div>`;
 }
