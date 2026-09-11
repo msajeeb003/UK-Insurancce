@@ -33,8 +33,12 @@ export async function boot() {
     const me = await fetch('/auth/me');
     if (me.ok) {
       const body = await me.json();
+      // A session from before the CSRF feature has no token — every write
+      // would 403. Treat it as not-signed-in so the broker re-logs in once
+      // and gets a valid token, instead of a broken authenticated state.
+      if (!body.csrf_token) return;
       setUser(body.email);
-      state.csrf = body.csrf_token || '';   // recover the CSRF token on reload
+      state.csrf = body.csrf_token;
       await loadProjects();
       state.screen = 'projects';
     }
