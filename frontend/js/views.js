@@ -5,7 +5,7 @@
 import {
   CONFIRM_KEYS, FIELDS, ICON, INSURERS, MINI_FIELDS, POLICY_OPTIONS, STEPS,
 } from './constants.js';
-import { esc, monthLabel, proj, state } from './state.js';
+import { esc, monthLabel, proj, saveStatusView, state } from './state.js';
 
 /* ── Cell helpers (shared with the export payload builder) ───────────── */
 export function cellValue(p, col, field) {
@@ -197,6 +197,7 @@ function renderTopbar() {
       </div>` : ''}
     </div>
     <div style="display:flex;align-items:center;gap:14px">
+      ${inWizard ? `<span id="save-indicator" style="font-size:12px;font-weight:500;color:${saveStatusView().color}">${saveStatusView().text}</span>` : ''}
       <div style="text-align:right;line-height:1.2">
         <div style="font-size:13px;font-weight:500">${esc(name)}</div>
         <div style="font-size:11px;color:var(--ink3)">Underwriting desk</div>

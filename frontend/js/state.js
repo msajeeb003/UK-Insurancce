@@ -46,20 +46,95 @@ export function csrfHeaders() {
   return state.csrf ? { 'X-CSRF-Token': state.csrf } : {};
 }
 
-/* Debounced per-project save — every edit reaches the server without a
-   request per keystroke. */
-const saveTimers = {};
-export function save(p) {
-  p = p || proj();
-  if (!p) return;
-  clearTimeout(saveTimers[p.id]);
-  saveTimers[p.id] = setTimeout(() => {
-    fetch('/projects', {
+/* ── Save with status, retry and failure notification ──────────────────
+   A silent .catch() used to swallow save failures — offline edits were
+   lost without a trace. Now: a visible status ("Saving…"/"Saved"/
+   "Offline"), automatic retries, a user notice if it keeps failing, and a
+   beforeunload guard so a pending save is not lost by closing the tab. */
+
+export const saveStatus = { status: 'idle' };   // idle|saving|saved|offline
+const SAVE_VIEW = {
+  idle:    { text: '',                                 color: 'var(--ink3)' },
+  saving:  { text: 'Saving…',                          color: 'var(--ink3)' },
+  saved:   { text: '✓ Saved',                          color: 'var(--ok)' },
+  offline: { text: '⚠ Offline — changes not saved',    color: 'var(--warn)' },
+};
+
+export function saveStatusView() {
+  return SAVE_VIEW[saveStatus.status] || SAVE_VIEW.idle;
+}
+
+/* Something is not safely on the server yet — used by the tab-close guard. */
+export function hasUnsavedWork() {
+  return saveStatus.status === 'saving' || saveStatus.status === 'offline';
+}
+
+// notify() lives in views.js (which imports this module); main.js wires it
+// in at boot to avoid a circular import.
+let _notify = null;
+export function setNotifier(fn) { _notify = fn; }
+
+function setSaveStatus(s) {
+  saveStatus.status = s;
+  const el = document.getElementById('save-indicator');
+  if (el) {
+    el.textContent = SAVE_VIEW[s].text;
+    el.style.color = SAVE_VIEW[s].color;
+  }
+}
+
+const SAVE_DEBOUNCE = 500;
+const RETRY_DELAY = 5000;
+const MAX_RETRIES = 3;
+const saveTimers = {};     // debounce timer per project id
+const retryTimers = {};    // retry timer per project id
+const retryCounts = {};    // consecutive failures per project id
+let offlineNotified = false;
+
+async function attemptSave(p) {
+  setSaveStatus('saving');
+  try {
+    const res = await fetch('/projects', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
       body: JSON.stringify({ id: p.id, state: p }),
-    }).catch(() => {});
-  }, 500);
+    });
+    if (res.status === 401 || res.status === 403) {
+      // Auth/CSRF problem — retrying won't help; the broker must re-sign-in.
+      setSaveStatus('offline');
+      if (_notify) _notify('Your session has expired — sign in again to save your changes.');
+      return;
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    retryCounts[p.id] = 0;
+    offlineNotified = false;
+    setSaveStatus('saved');
+  } catch (e) {
+    // Network/server failure — keep the edits and retry.
+    const n = (retryCounts[p.id] || 0) + 1;
+    retryCounts[p.id] = n;
+    setSaveStatus('offline');
+    if (n <= MAX_RETRIES) {
+      clearTimeout(retryTimers[p.id]);
+      retryTimers[p.id] = setTimeout(() => attemptSave(p), RETRY_DELAY);
+    } else if (!offlineNotified) {
+      offlineNotified = true;
+      retryCounts[p.id] = 0;
+      if (_notify) {
+        _notify("Changes couldn't be saved — check your connection. Your "
+          + "edits are still here and will save automatically once you're "
+          + "back online.");
+      }
+    }
+  }
+}
+
+export function save(p) {
+  p = p || proj();
+  if (!p) return;
+  setSaveStatus('saving');                 // reflect the pending change at once
+  clearTimeout(saveTimers[p.id]);
+  saveTimers[p.id] = setTimeout(() => attemptSave(p), SAVE_DEBOUNCE);
 }
 
 export const proj = () => state.projects.find(p => p.id === state.currentId) || null;

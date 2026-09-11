@@ -3,9 +3,13 @@
 
 import { downloadExport, loadInsurerConfig, uploadFiles } from './api.js';
 import {
-  boot, createProject, loadProjects, proj, save, setUser, state, touch, uid,
+  boot, createProject, hasUnsavedWork, loadProjects, proj, save, setNotifier,
+  setUser, state, touch, uid,
 } from './state.js';
 import { allConfirmed, gateReason, notify, projectRowsHtml, render } from './views.js';
+
+// Let the save layer (state.js) raise themed notices without a circular import.
+setNotifier(notify);
 
 const ACTIONS = {
   async signIn() {
@@ -214,6 +218,15 @@ document.addEventListener('change', e => {
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && state.screen === 'login') ACTIONS.signIn();
   if (e.key === 'Escape' && state.source) ACTIONS.closeSource();
+});
+
+/* Warn before closing the tab while a save is still pending or failed —
+   the browser shows its native "Leave site?" confirmation. */
+window.addEventListener('beforeunload', e => {
+  if (hasUnsavedWork()) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
 });
 
 /* ── Drag-and-drop upload (BRD 2.1: drag-and-drop with picker fallback) ── */
