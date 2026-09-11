@@ -33,6 +33,47 @@ def test_rate_limit_skips_read_endpoints(client, monkeypatch):
         main_mod._rate_buckets.clear()
 
 
+def test_rate_buckets_are_swept_of_idle_ips():
+    """Idle IP buckets are removed (no unbounded memory growth), and the
+    tracked-IP ceiling is enforced."""
+    from collections import deque
+
+    import app.main as m
+
+    m._rate_buckets.clear()
+    now = 1_000.0
+    # 3 active IPs (recent) + 2 idle (last seen >60s ago)
+    m._rate_buckets["active-1"] = deque([now - 5])
+    m._rate_buckets["active-2"] = deque([now - 10])
+    m._rate_buckets["active-3"] = deque([now - 59])
+    m._rate_buckets["idle-1"] = deque([now - 120])
+    m._rate_buckets["idle-2"] = deque([])          # emptied by an earlier prune
+    try:
+        m._sweep_rate_buckets(now)
+        assert set(m._rate_buckets) == {"active-1", "active-2", "active-3"}
+    finally:
+        m._rate_buckets.clear()
+
+
+def test_rate_buckets_respect_max_tracked_ips(monkeypatch):
+    from collections import deque
+
+    import app.main as m
+
+    m._rate_buckets.clear()
+    monkeypatch.setattr(m, "_MAX_TRACKED_IPS", 5)
+    now = 1_000.0
+    # 8 IPs, all recently active; only the 5 most-recent should survive.
+    for i in range(8):
+        m._rate_buckets[f"ip-{i}"] = deque([now - (8 - i)])  # ip-7 newest
+    try:
+        m._sweep_rate_buckets(now)
+        assert len(m._rate_buckets) == 5
+        assert "ip-7" in m._rate_buckets and "ip-0" not in m._rate_buckets
+    finally:
+        m._rate_buckets.clear()
+
+
 def test_csp_header_present(client):
     res = client.get("/")
     csp = res.headers["Content-Security-Policy"]

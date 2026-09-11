@@ -90,6 +90,27 @@ async def security_headers(request: Request, call_next) -> Response:
 _RATE_LIMITED_PATHS = {"/extract-quote", "/generate-presentation"}
 _rate_lock = threading.Lock()
 _rate_buckets: dict[str, deque] = {}
+# Without cleanup, one bucket per unique IP would accumulate forever (a
+# slow memory leak). A periodic sweep drops idle IPs, and a hard ceiling
+# caps memory even under an IP-spraying burst. In-memory only — restarting
+# the process resets the windows; a shared store (Redis) is a later step.
+_rate_sweep_counter = 0
+_RATE_SWEEP_EVERY = 100        # run the global sweep once every N limited requests
+_MAX_TRACKED_IPS = 10000       # hard ceiling on distinct IPs kept in memory
+
+
+def _sweep_rate_buckets(now: float) -> None:
+    """Remove IP buckets idle for over 60s; if still above the ceiling,
+    drop the least-recently-active IPs. Caller must hold `_rate_lock`."""
+    idle = [ip for ip, b in _rate_buckets.items() if not b or now - b[-1] > 60]
+    for ip in idle:
+        del _rate_buckets[ip]
+    overflow = len(_rate_buckets) - _MAX_TRACKED_IPS
+    if overflow > 0:
+        # Oldest last-activity first — those are the safest to forget.
+        oldest = sorted(_rate_buckets.items(), key=lambda kv: kv[1][-1])
+        for ip, _ in oldest[:overflow]:
+            del _rate_buckets[ip]
 
 
 @app.middleware("http")
@@ -105,7 +126,12 @@ async def rate_limit(request: Request, call_next) -> Response:
             client_ip = request.client.host if request.client else "unknown"
             now = time.monotonic()
             with _rate_lock:
+                global _rate_sweep_counter
+                _rate_sweep_counter += 1
+                if _rate_sweep_counter % _RATE_SWEEP_EVERY == 0:
+                    _sweep_rate_buckets(now)
                 bucket = _rate_buckets.setdefault(client_ip, deque())
+                # Drop this IP's timestamps older than the 60s window.
                 while bucket and now - bucket[0] > 60:
                     bucket.popleft()
                 if len(bucket) >= limit:
