@@ -98,6 +98,45 @@ def test_migration_upgrades_an_old_database(tmp_path):
     conn.close()
 
 
+def test_expired_session_rejected_but_not_deleted_on_check(client):
+    """An auth check rejects an expired session via the query filter and no
+    longer runs a DELETE — cleanup is a separate background job."""
+    from app.core import auth, db
+
+    if not db.query_one("SELECT id FROM users WHERE email=?", ("exp@test.local",)):
+        auth.create_user("exp@test.local", "pw-12345678")
+    uid = db.query_one("SELECT id FROM users WHERE email=?", ("exp@test.local",))["id"]
+    token = "raw-expired-token"  # noqa: S105 — test fixture, not a real secret
+    th = auth._token_hash(token)
+    db.execute("INSERT INTO sessions (token_hash, user_id, expires) VALUES (?,?,?)",
+               (th, uid, db.now() - 10))          # already expired
+
+    assert auth.user_for_token(token) is None      # rejected
+    # the check did NOT delete it (no per-request cleanup)
+    assert db.query_one("SELECT 1 AS x FROM sessions WHERE token_hash=?", (th,)) is not None
+
+    auth.delete_expired_sessions()                 # background job clears it
+    assert db.query_one("SELECT 1 AS x FROM sessions WHERE token_hash=?", (th,)) is None
+    db.execute("DELETE FROM users WHERE email=?", ("exp@test.local",))
+
+
+def test_delete_expired_sessions_keeps_valid_ones(client):
+    from app.core import auth, db
+
+    if not db.query_one("SELECT id FROM users WHERE email=?", ("v@test.local",)):
+        auth.create_user("v@test.local", "pw-12345678")
+    uid = db.query_one("SELECT id FROM users WHERE email=?", ("v@test.local",))["id"]
+    db.execute("INSERT INTO sessions (token_hash, user_id, expires) VALUES (?,?,?)",
+               ("valid-tok", uid, db.now() + 3600))
+    db.execute("INSERT INTO sessions (token_hash, user_id, expires) VALUES (?,?,?)",
+               ("expired-tok", uid, db.now() - 1))
+
+    auth.delete_expired_sessions()
+    assert db.query_one("SELECT 1 AS x FROM sessions WHERE token_hash='valid-tok'") is not None
+    assert db.query_one("SELECT 1 AS x FROM sessions WHERE token_hash='expired-tok'") is None
+    db.execute("DELETE FROM users WHERE email=?", ("v@test.local",))
+
+
 def test_execute_transaction_is_atomic(client):
     """A multi-statement write rolls back entirely if any statement fails —
     a project deletion (BRD 2.11) can never land half-applied."""

@@ -100,14 +100,23 @@ def login(email: str, password: str) -> str | None:
 def user_for_token(token: str | None) -> dict | None:
     if not token:
         return None
+    # The `expires > now` filter already rejects an expired session, so no
+    # cleanup DELETE is needed on every auth check — that housekeeping runs
+    # periodically in the background instead (see delete_expired_sessions).
     row = db.query_one(
         "SELECT u.id, u.email, u.name FROM sessions s "
         "JOIN users u ON u.id = s.user_id "
         "WHERE s.token_hash=? AND s.expires > ?",
         (_token_hash(token), db.now()),
     )
-    db.execute("DELETE FROM sessions WHERE expires <= ?", (db.now(),))
     return dict(row) if row else None
+
+
+def delete_expired_sessions() -> None:
+    """Remove sessions past their expiry. Run periodically in the
+    background (and once at startup) — never on the per-request auth path,
+    so an auth check stays a single fast SELECT."""
+    db.execute("DELETE FROM sessions WHERE expires <= ?", (db.now(),))
 
 
 def require_user(qct_session: str | None = Cookie(default=None)) -> dict:

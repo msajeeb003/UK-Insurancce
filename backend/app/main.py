@@ -12,6 +12,7 @@ Endpoints (see app/api/routes.py):
     GET  /                       broker frontend (frontend/ directory)
 """
 
+import asyncio
 import logging
 import threading
 import time
@@ -25,13 +26,17 @@ from fastapi.staticfiles import StaticFiles
 from app.api.auth import router as auth_router
 from app.api.projects import router as projects_router
 from app.api.routes import router
-from app.core.auth import seed_admin_if_empty
+from app.core.auth import delete_expired_sessions, seed_admin_if_empty
 from app.core.config import get_settings
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
+logger = logging.getLogger(__name__)
+
+_SESSION_CLEANUP_INTERVAL = 3600   # seconds between expired-session sweeps
+_background_tasks: set[asyncio.Task] = set()
 
 # backend/app/main.py -> repo root -> frontend/ (kept fully separate from
 # the backend; the server only serves its static files).
@@ -57,6 +62,24 @@ app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="frontend")
 def _startup() -> None:
     # BRD 2.10: no self-registration — first user comes from the environment.
     seed_admin_if_empty()
+
+
+@app.on_event("startup")
+async def _start_session_cleanup() -> None:
+    """Purge expired sessions once at startup, then every hour — instead of
+    on every auth check. Pure asyncio, no external scheduler."""
+    async def loop() -> None:
+        while True:
+            try:
+                delete_expired_sessions()
+            except Exception:
+                logger.exception("Expired-session cleanup failed")
+            await asyncio.sleep(_SESSION_CLEANUP_INTERVAL)
+
+    # Keep a reference so the task is not garbage-collected mid-run.
+    task = asyncio.create_task(loop())
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 # The frontend uses inline style attributes and Google Fonts; scripts are
 # strictly same-origin files (no inline handlers anywhere).
