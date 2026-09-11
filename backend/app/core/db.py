@@ -18,6 +18,7 @@ in-process lock cannot: a second process (the `app.manage` CLI) touching
 the same file while the server runs.
 """
 
+import logging
 import sqlite3
 import threading
 import time
@@ -25,10 +26,14 @@ from pathlib import Path
 
 from app.core.config import get_settings
 
+logger = logging.getLogger(__name__)
+
 _lock = threading.Lock()
 _conn: sqlite3.Connection | None = None
 _conn_path: Path | None = None
 
+# The version-1 schema. Every statement uses IF NOT EXISTS, so applying it
+# to a fresh OR an already-created database is safe (idempotent).
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY,
@@ -67,6 +72,60 @@ CREATE TABLE IF NOT EXISTS exports (
 );
 """
 
+# ── Schema migrations (lightweight, no Alembic) ──────────────────────────
+# Each entry is (version, sql_script), applied in ascending order exactly
+# once. `_schema_version` records which have run, so `CREATE TABLE IF NOT
+# EXISTS` on its own — which does nothing to an existing table — is no
+# longer the only tool: to change the schema you append a NEW migration.
+#
+# RULES for adding one:
+#   * Append only; never edit or reorder an existing entry — deployed
+#     databases have already applied it and are tracking by version number.
+#   * Give it the next integer version.
+#   * Write it to be safe to re-run where you can (IF NOT EXISTS, etc.).
+#
+# Version 1 is the base schema above. Version 2 is an EXAMPLE showing how a
+# future column is added — `owner_id` is not used yet (BRD 2.10: all users
+# see all projects), it is here purely to demonstrate the pattern.
+MIGRATIONS: list[tuple[int, str]] = [
+    (1, SCHEMA),
+    (2, "ALTER TABLE projects ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''"),
+]
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    """Bring the database up to the latest schema version.
+
+    Reads the highest applied version from `_schema_version`, then applies
+    every migration newer than that, in order. Each migration and the row
+    that records its version are committed together in ONE transaction
+    (SQLite can roll back DDL), so a crash mid-migration leaves the schema
+    untouched and the migration simply retries on the next startup —
+    never half-applied.
+    """
+    conn.executescript(
+        "CREATE TABLE IF NOT EXISTS _schema_version ("
+        "  version INTEGER PRIMARY KEY,"
+        "  applied REAL NOT NULL"
+        ");"
+    )
+    row = conn.execute("SELECT MAX(version) AS v FROM _schema_version").fetchone()
+    current = row["v"] or 0
+    for version, sql in MIGRATIONS:
+        if version <= current:
+            continue
+        # version/timestamp are trusted internal numerics (not user input),
+        # so embedding them keeps the whole step inside one executescript
+        # transaction — the only way to apply DDL and record the version
+        # atomically (executescript ignores isolation_level).
+        # version/time are internal numerics (not user input), so embedding
+        # them is safe and keeps migration + version-bump in one transaction.
+        record = f"INSERT INTO _schema_version (version, applied) VALUES ({version}, {time.time()});"  # noqa: S608
+        conn.executescript(
+            "BEGIN;\n" + sql.rstrip().rstrip(";") + ";\n" + record + "\nCOMMIT;"
+        )
+        logger.info("Applied schema migration v%s", version)
+
 
 def _connect() -> sqlite3.Connection:
     global _conn, _conn_path
@@ -81,7 +140,7 @@ def _connect() -> sqlite3.Connection:
         # release the write lock instead of failing immediately with
         # SQLITE_BUSY.
         conn.execute("PRAGMA busy_timeout=5000")
-        conn.executescript(SCHEMA)
+        _run_migrations(conn)
         _conn, _conn_path = conn, path
     return _conn
 

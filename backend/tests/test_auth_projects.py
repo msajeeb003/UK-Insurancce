@@ -51,6 +51,53 @@ def test_project_save_list_delete(client):
     assert not any(p["id"] == "p-test-1" for p in listed)
 
 
+def test_migrations_apply_and_are_idempotent(tmp_path):
+    """A fresh database is brought to the latest version, the example
+    migration's column exists, and re-running does nothing (no error)."""
+    import sqlite3
+
+    from app.core import db
+
+    conn = sqlite3.connect(tmp_path / "fresh.db")
+    conn.row_factory = sqlite3.Row
+    db._run_migrations(conn)
+
+    latest = db.MIGRATIONS[-1][0]
+    v = conn.execute("SELECT MAX(version) AS v FROM _schema_version").fetchone()["v"]
+    assert v == latest
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(projects)")]
+    assert "owner_id" in cols                      # v2 example migration ran
+
+    db._run_migrations(conn)                        # re-run: no-op, no error
+    v2 = conn.execute("SELECT MAX(version) AS v FROM _schema_version").fetchone()["v"]
+    assert v2 == latest
+    conn.close()
+
+
+def test_migration_upgrades_an_old_database(tmp_path):
+    """A database created the old way (base tables, no _schema_version)
+    upgrades cleanly — the new column is added without touching data."""
+    import sqlite3
+
+    from app.core import db
+
+    conn = sqlite3.connect(tmp_path / "old.db")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(db.SCHEMA)                   # old-style: base tables only
+    conn.execute("INSERT INTO projects (id, client_name, updated, state) "
+                 "VALUES ('keep-me', 'Acme', 1.0, '{}')")
+    conn.commit()
+
+    db._run_migrations(conn)
+
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(projects)")]
+    assert "owner_id" in cols
+    # existing data survives the migration
+    row = conn.execute("SELECT client_name, owner_id FROM projects WHERE id='keep-me'").fetchone()
+    assert row["client_name"] == "Acme" and row["owner_id"] == ""
+    conn.close()
+
+
 def test_execute_transaction_is_atomic(client):
     """A multi-statement write rolls back entirely if any statement fails —
     a project deletion (BRD 2.11) can never land half-applied."""
