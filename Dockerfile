@@ -29,5 +29,12 @@ ENV DATA_DIR=/data
 RUN mkdir -p /data
 
 EXPOSE 8000
-# $PORT is injected by Railway/Render; default 8000 elsewhere.
-CMD ["sh", "-c", "uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port ${PORT:-8000}"]
+# Gunicorn runs several Uvicorn (ASGI) workers behind one port:
+#   * PORT       — injected by Railway/Render (default 8000).
+#   * WORKERS    — explicit worker count; falls back to WEB_CONCURRENCY,
+#                  then 2. Raise it for more concurrent load / CPU cores.
+#   * --timeout 180 — an extraction waits 1-2 min on the LLM; the default
+#                  30s would kill the worker mid-request.
+#   * --pythonpath backend — makes the `app` package importable (the code
+#                  lives in /srv/backend).
+CMD ["sh", "-c", "gunicorn app.main:app -k uvicorn.workers.UvicornWorker --workers ${WORKERS:-${WEB_CONCURRENCY:-2}} --bind 0.0.0.0:${PORT:-8000} --pythonpath backend --timeout 180"]

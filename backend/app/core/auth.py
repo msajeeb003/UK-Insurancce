@@ -13,6 +13,7 @@ Authentication (BRD 2.10 / S1): simple secure email + password login.
 import hashlib
 import logging
 import secrets
+import sqlite3
 
 from fastapi import Cookie, HTTPException
 
@@ -58,8 +59,14 @@ def seed_admin_if_empty() -> None:
     email = settings.admin_email.strip().lower()
     password = settings.admin_password.get_secret_value()
     if email and password:
-        create_user(email, password)
-        logger.info("Seeded initial user %s from ADMIN_EMAIL", email)
+        try:
+            create_user(email, password)
+            logger.info("Seeded initial user %s from ADMIN_EMAIL", email)
+        except sqlite3.IntegrityError:
+            # Multiple gunicorn workers can start together and race to seed;
+            # the UNIQUE(email) constraint means only the first wins, and
+            # that is fine — the user exists.
+            logger.info("Initial user already seeded by another worker")
     else:
         logger.warning(
             "No users exist and ADMIN_EMAIL/ADMIN_PASSWORD are not set — "
