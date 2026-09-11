@@ -1,21 +1,9 @@
-"""
-SQLite persistence (BRD 2.9/2.10): users, sessions, projects, retained
-documents and generated exports.
+"""SQLite persistence (BRD 2.9/2.10): users, sessions, projects, documents,
+exports. One file at <DATA_DIR>/app.db — fits the BRD's 3-4 user scale.
 
-One database file at <DATA_DIR>/app.db. SQLite fits the BRD's scale
-(three to four internal users): no database server to run, and backing
-up the deployment is copying the data directory. A single shared
-connection is serialised with a lock; every statement commits.
-
-Concurrency notes (why this stays a single locked connection rather than
-one connection per thread): SQLite allows only one writer at a time, so
-serialising writes in-process with the lock is what AVOIDS "database is
-locked" errors — it does not cause them. At the BRD's scale each
-statement is a sub-millisecond write, and the lock is never held across
-an LLM call (extraction finishes before anything is stored), so there is
-no request-blocking to fix. `busy_timeout` covers the one case the
-in-process lock cannot: a second process (the `app.manage` CLI) touching
-the same file while the server runs.
+Writes are serialised through one locked connection (SQLite allows a single
+writer, so the lock avoids "database is locked" rather than causing it);
+busy_timeout covers a second process (the manage CLI) touching the file.
 """
 
 import logging

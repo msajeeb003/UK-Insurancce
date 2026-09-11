@@ -1,17 +1,8 @@
-"""
-Mapping library + insurer rules, loaded from `config/` as DATA (BRD 2.3/2.4).
+"""Mapping library + insurer rules, loaded from config/ as data (BRD 2.3/2.4).
 
-Two files drive extraction quality and the debt-collection rule:
-
-    config/insurers.json     standing insurer list, aliases, and the
-                             debt-collection rule (included / outsourced)
-    config/terminology.json  what each insurer calls each comparison row
-
-Both are configuration, not code — the BRD requires that adding an insurer,
-moving one between Included and Outsourced, or extending the terminology
-mapping never needs a release. Files are re-read automatically when their
-modification time changes, so an edit takes effect on the next request
-without restarting the server.
+insurers.json (standing list, aliases, debt rule) and terminology.json
+(field -> insurer wordings) are configuration, not code — re-read on mtime
+change, so edits take effect without a release.
 """
 
 import json

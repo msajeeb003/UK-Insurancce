@@ -1,16 +1,8 @@
-"""
-The extraction prompt, shared by every LLM provider.
+"""Shared extraction prompt — one contract for every LLM provider.
 
-One prompt, one contract: whichever provider runs (OpenAI or Claude), the
-model receives exactly the same rules and the same mapping library, and
-must return the same `QuoteExtraction` schema — so switching providers can
-never silently change extraction behaviour.
-
-The terminology section is built at request time from
-config/terminology.json, and insurer identification is helped by the
-standing list in config/insurers.json — both are client-maintained
-configuration (BRD 2.3: the mapping library is a build dependency compiled
-by the client), so extending them never touches this code.
+The terminology section and insurer list are built at request time from
+config/*.json (client-maintained, BRD 2.3), so extending them never
+touches code.
 """
 
 from app.services.library import get_insurers, get_terminology

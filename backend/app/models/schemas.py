@@ -1,34 +1,9 @@
-"""
-Pydantic models — aligned to BRD v1.2.
+"""Pydantic models for extraction (BRD v1.2).
 
-Three groups:
-
-1. LLM-facing models (`QuoteExtraction` + children) — passed to the OpenAI
-   Responses API as the Structured Output schema. Strict mode is enforced by
-   the SDK, so the model can ONLY return this exact shape. Every scalar field
-   is a `SourcedValue`: the raw value as written in the document, the PDF
-   page (or Excel sheet) it was found on, and a confidence flag. A missing
-   value is `value=null, page=null, confidence=null` (BRD 2.2: blank, never
-   guessed, never placeholder text).
-
-   Insurer wording synonyms are NOT hardcoded here — they come from the
-   terminology mapping library (config/terminology.json, BRD 2.3) and are
-   injected into the extraction prompt at request time.
-
-2. Rule-set fields (`SetFields`) — BRD 2.4: debt collection support is set
-   by the insurer rule in config/insurers.json, never extracted. Type of
-   policy is the other set field; it is broker-selected at project level in
-   the UI, so it does not appear in this response at all.
-
-3. API-facing models (`ExtractionResponse`) — what `/extract-quote` returns:
-   processing metadata, a review summary (missing / uncertain fields and the
-   BRD 2.5 confirmation gate list, computed server-side, never by the LLM),
-   the rule-set fields, and the extraction itself.
-
-The BRD 2.3 comparison list is definitive: 16 rows = insurer + 13 extracted
-fields below + the 2 set fields. Countries covered and exclusions are NOT on
-the confirmed slide (BRD open item) — material notes of that kind belong in
-`additional_info` until the client confirms otherwise.
+QuoteExtraction is the strict LLM structured-output schema — every scalar
+is a page-linked SourcedValue, missing = all-null (BRD 2.2). SetFields are
+rule-set, not extracted (BRD 2.4). ExtractionResponse is what
+/extract-quote returns. Terminology synonyms live in config/terminology.json.
 """
 
 from typing import Literal

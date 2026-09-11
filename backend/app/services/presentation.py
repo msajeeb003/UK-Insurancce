@@ -1,29 +1,10 @@
-"""
-Presentation generation (BRD 2.8): editable PowerPoint + PDF, plus the
-buyer credit-limit table as an editable Excel file (BRD 2.6 output).
+"""Presentation generation (BRD 2.8): editable PPTX + PDF + credit-limit XLSX.
 
-Template: the brokerage's real deck ("Renewal Presentation of Terms",
-UK Credit Insurance Brokers) — page order, headings, fixed wording,
-table labels and the navy/teal brand palette all follow that sample:
-  1. Cover                 "<Client> - [Renewal] Credit Insurance Presentation"
-  2. About Us              fixed template text + services + phone
-  3. Feedback of Terms     fixed Insurance Act 2015 wording + insurers
-                           approached + auto-generated declined line
-  4. Terms Comparison      the BRD 2.3 rows x 1-6 insurer columns, the
-                           recommended column highlighted, notes beneath
-  5. Credit Limits         buyer table with totals; omitted when empty
-  6. Demands & needs       fixed FCA wording, recommendation merged with
-                           the insurer's name, broker's numbered reasons
-  7. Contact Us            fixed template text
-
-Rules enforced here, server-side:
-  - BRD 2.5 gate: generation refused (409) until the four key values are
-    confirmed — no client can bypass it.
-  - BRD 2.7: the regulatory wording (Duty of Fair Presentation, FCA
-    status) is always rendered; it cannot be edited out.
-  - BRD 2.2: blank values render blank — never "N/A", never a default.
-  - The PPTX uses only standard shapes/tables/text so it opens and edits
-    cleanly in Google Slides (the brokerage runs on G Suite).
+7-page deck matching the brokerage's approved template (cover, About Us,
+Feedback of Terms, Terms Comparison, Credit Limits, Demands & needs,
+Contact). Server-side rules: 409 until the four key values are confirmed
+(2.5); regulatory wording always rendered (2.7); blanks stay blank (2.2);
+PPTX uses only plain shapes/tables so it opens cleanly in Google Slides.
 """
 
 import io

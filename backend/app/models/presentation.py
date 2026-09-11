@@ -1,11 +1,7 @@
-"""
-Request models for POST /generate-presentation (BRD 2.8).
+"""Request models for POST /generate-presentation (BRD 2.8).
 
-The frontend sends the reviewed project state — columns, values (extracted
-or broker-edited), credit-limit rows, the recommendation, notes and
-reasons — and the server renders the presentation. The BRD 2.5 export gate
-is enforced HERE, server-side: the four key values must be confirmed or
-generation is refused, so no client can bypass it.
+The frontend sends the reviewed project state; the server renders the
+deck. The BRD 2.5 export gate is enforced server-side.
 """
 
 from typing import Literal

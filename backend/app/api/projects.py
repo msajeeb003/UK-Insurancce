@@ -1,11 +1,8 @@
-"""
-Project storage endpoints (BRD 2.9 / S2): projects are saved
-server-side, reopenable by every user, with the uploaded documents
-retained and the latest generated exports downloadable.
+"""Project storage endpoints (BRD 2.9 / S2): save, list, reopen, delete;
+retained documents and downloadable exports.
 
-The project body is the reviewed UI state as one JSON blob — the review
-screen is the source of truth and the server never edits it. No version
-history and no audit trail in this build (BRD 2.9).
+The project body is the reviewed UI state as one JSON blob — the server
+stores it verbatim, never edits it. No versioning in this build.
 """
 
 import json
