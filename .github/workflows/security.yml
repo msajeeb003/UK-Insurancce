@@ -1,0 +1,68 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"        # weekly — catch new advisories on unchanged deps
+
+permissions:
+  contents: read
+
+jobs:
+  # 1. Python dependency vulnerabilities. Fails on ANY advisory; waive a
+  #    specific one with `--ignore-vuln <ID>` here (see SECURITY.md).
+  deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit
+      - name: pip-audit (runtime dependencies)
+        run: pip-audit -r backend/requirements.txt
+
+  # JS dependencies — the frontend is dependency-free vanilla JS today; this
+  # guards the "any JS deps" clause for the future.
+  js-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: npm audit (only if a JS manifest exists)
+        run: |
+          if [ -f frontend/package.json ]; then
+            cd frontend && npm audit --audit-level=high
+          else
+            echo "No JS dependency manifest — nothing to audit."
+          fi
+
+  # 2. Docker image scan. Fails on fixable HIGH/CRITICAL; waive via .trivyignore.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t quote-tool:scan .
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: quote-tool:scan
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+
+  # 3. Secret scanning across the working tree AND full git history.
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # full history
+      - name: gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
+            | tar -xz gitleaks
+          ./gitleaks detect --source . --config .gitleaks.toml --redact --exit-code 1 --verbose

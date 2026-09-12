@@ -1,0 +1,15 @@
+title = "Quote tool — gitleaks config"
+
+[extend]
+useDefault = true   # all of gitleaks' built-in secret rules
+
+[allowlist]
+description = "Illustrative fake secrets in tests, docs and the env template"
+# These paths hold placeholders / test fixtures only — real secrets live in
+# environment variables (.env is git-ignored), never in code. A leak of a
+# genuine secret would appear in an APP or config path, which is still scanned.
+paths = [
+  '''^\.env\.example$''',
+  '''^backend/tests/''',
+  '''^docs/''',
+]

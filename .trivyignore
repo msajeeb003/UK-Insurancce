@@ -1,0 +1,4 @@
+# Trivy image-scan waivers. Add a CVE id on its own line to suppress it,
+# with a justification and a review date — see SECURITY.md.
+# Example:
+#   CVE-2025-12345   # base-image only, not reachable; review 2026-12
