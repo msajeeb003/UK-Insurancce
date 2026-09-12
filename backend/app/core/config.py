@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     admin_email: str = ""
     admin_password: SecretStr = SecretStr("")
     session_ttl_hours: int = 72
+    # Log a session out after this much inactivity (0 disables). Absolute
+    # expiry (session_ttl_hours) still applies on top.
+    inactivity_timeout_minutes: int = 60
+    # Lockout: after this many failed logins (per account AND per IP), block
+    # further attempts for the cooldown.
+    login_max_attempts: int = 5
+    login_lockout_minutes: int = 15
     # Set COOKIE_SECURE=true behind HTTPS in production.
     cookie_secure: bool = False
     # Data retention (BRD 2.11): hard-delete projects untouched for longer

@@ -95,6 +95,17 @@ MIGRATIONS: list[tuple[int, str]] = [
         exported INTEGER NOT NULL DEFAULT 0
     );
     """),
+    # v5: login throttle / lockout (keyed by 'acct:<email>' and 'ip:<addr>').
+    (5, """
+    CREATE TABLE IF NOT EXISTS login_throttle (
+        key TEXT PRIMARY KEY,
+        failed INTEGER NOT NULL DEFAULT 0,
+        locked_until REAL NOT NULL DEFAULT 0,
+        updated REAL NOT NULL
+    );
+    """),
+    # v6: session inactivity tracking (0 = grandfathered / not yet seen).
+    (6, "ALTER TABLE sessions ADD COLUMN last_seen REAL NOT NULL DEFAULT 0"),
 ]
 
 

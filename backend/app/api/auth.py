@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from app.core import auth
@@ -17,8 +17,18 @@ class LoginRequest(BaseModel):
 
 
 @router.post("/login")
-def login(body: LoginRequest, response: Response) -> dict:
-    result = auth.login(body.email, body.password)
+def login(body: LoginRequest, request: Request, response: Response) -> dict:
+    ip = request.client.host if request.client else ""
+    try:
+        result = auth.login(body.email, body.password, ip)
+    except auth.LockedOut as locked:
+        raise HTTPException(
+            status_code=429,
+            detail=("Too many failed attempts. Try again in "
+                    f"{max(1, locked.retry_after // 60)} minute(s), or ask an "
+                    "admin to unlock the account."),
+            headers={"Retry-After": str(locked.retry_after)},
+        ) from locked
     if result is None:
         raise HTTPException(status_code=401, detail="Wrong email or password.")
     token, csrf = result
