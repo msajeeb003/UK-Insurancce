@@ -12,6 +12,10 @@ FROM python:3.12-slim
 
 WORKDIR /srv
 
+# Patch base-image OS packages so the image ships without known fixable
+# HIGH/CRITICAL CVEs (enforced by the Trivy scan in CI).
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 COPY backend/requirements.txt backend/requirements.txt
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
