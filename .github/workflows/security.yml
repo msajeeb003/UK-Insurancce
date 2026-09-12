@@ -45,14 +45,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build image
         run: docker build -t quote-tool:scan .
-      - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: quote-tool:scan
-          severity: HIGH,CRITICAL
-          exit-code: "1"
-          ignore-unfixed: true
-          trivyignores: .trivyignore
+      - name: Install Trivy
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin
+      - name: Trivy scan (fail on fixable HIGH/CRITICAL)
+        run: |
+          trivy image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 \
+            --ignore-unfixed --ignorefile .trivyignore quote-tool:scan
 
   # 3. Secret scanning across the working tree AND full git history.
   secrets:
