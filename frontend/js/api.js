@@ -204,7 +204,10 @@ function applyExtraction(p, entry, body, kind) {
     if (f.set) continue;
     const sv = d[f.key];
     if (sv && typeof sv === 'object') {
-      freshData[f.key] = { value: sv.value || '', page: sv.page, conf: sv.confidence };
+      // `orig` keeps the AI's value so the edit rate (BRD §5) can be measured.
+      freshData[f.key] = {
+        value: sv.value || '', orig: sv.value || '', page: sv.page, conf: sv.confidence,
+      };
     }
   }
 
@@ -268,11 +271,33 @@ function buildPresentationPayload(p) {
   };
 }
 
+/* Edit rate (BRD §5): of the non-set fields the AI actually extracted (a
+   value, on a real quote column), how many did the broker change. Set fields
+   (type_of_policy, debt) and manual columns are excluded — not extractions. */
+function editStats(p) {
+  let total = 0, edited = 0;
+  for (const col of p.columns) {
+    if (col.manual) continue;
+    for (const f of FIELDS) {
+      if (f.set) continue;
+      const sv = col.data[f.key];
+      if (!sv || !('orig' in sv) || (sv.orig || '') === '') continue;
+      total += 1;
+      if ((sv.value || '') !== (sv.orig || '')) edited += 1;
+    }
+  }
+  return { total, edited };
+}
+
 export async function downloadExport(format) {
   const p = proj(); if (!p) return false;
   try {
+    const { total, edited } = editStats(p);
+    const prep = p.created ? Math.round((Date.now() - p.created) / 1000) : '';
     const res = await fetch('/generate-presentation?format=' + format
-      + '&project_id=' + encodeURIComponent(p.id), {
+      + '&project_id=' + encodeURIComponent(p.id)
+      + '&fields_total=' + total + '&fields_edited=' + edited
+      + (prep !== '' ? '&prep_seconds=' + prep : ''), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
       body: JSON.stringify(buildPresentationPayload(p)),

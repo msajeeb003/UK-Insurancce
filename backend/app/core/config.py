@@ -82,6 +82,12 @@ class Settings(BaseSettings):
     backup_retention_monthly: int = 12
     backup_alert_webhook: str = ""    # optional: POST {text} here on backup/integrity failure
 
+    # ── Observability ────────────────────────────────────────────────────
+    sentry_dsn: str = ""              # empty = Sentry disabled (no-op)
+    sentry_environment: str = "production"
+    # /readyz alerts when free disk on DATA_DIR falls below this fraction.
+    disk_free_min_ratio: float = 0.10
+
     # ── Guard rails ──────────────────────────────────────────────────────
     max_upload_mb: int = 25
     # Documents longer than this are rejected before any paid API call —

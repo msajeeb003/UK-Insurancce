@@ -25,16 +25,16 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.auth import router as auth_router
+from app.api.observability import router as observability_router
 from app.api.projects import router as projects_router
 from app.api.routes import router
 from app.core import auth as auth_core
+from app.core import observability as obs
 from app.core.auth import COOKIE_NAME, delete_expired_sessions, seed_admin_if_empty
 from app.core.config import get_settings
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+obs.configure_logging()          # JSON logs with request id / user id
+obs.init_sentry()                # DSN-gated; no-op when SENTRY_DSN unset
 logger = logging.getLogger(__name__)
 
 _SESSION_CLEANUP_INTERVAL = 3600   # seconds between expired-session sweeps
@@ -57,7 +57,32 @@ app = FastAPI(
 app.include_router(router)
 app.include_router(auth_router)
 app.include_router(projects_router)
+app.include_router(observability_router)
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="frontend")
+
+
+@app.middleware("http")
+async def request_context(request: Request, call_next) -> Response:
+    """Tag each request with a correlation id (echoed in X-Request-Id and
+    every log line), and turn an unhandled exception into a clean 500 that is
+    logged + sent to Sentry — never a stack trace to the client."""
+    rid = request.headers.get("X-Request-Id") or obs.new_request_id()
+    obs.request_id_var.set(rid)
+    obs.user_id_var.set("-")
+    started = time.monotonic()
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        obs.capture(exc, path=request.url.path, method=request.method)
+        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        response = JSONResponse(status_code=500, content={"detail": "Internal error."})
+    took = int((time.monotonic() - started) * 1000)
+    response.headers["X-Request-Id"] = rid
+    if request.url.path not in ("/healthz", "/readyz") and response.status_code >= 500:
+        logger.error("5xx on %s %s", request.method, request.url.path,
+                     extra={"extra_fields": {"status": response.status_code,
+                                             "duration_ms": took}})
+    return response
 
 
 @app.on_event("startup")

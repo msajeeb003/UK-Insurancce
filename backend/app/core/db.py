@@ -82,6 +82,19 @@ MIGRATIONS: list[tuple[int, str]] = [
     # CSRF check on their next state-changing request — the broker simply
     # signs in again and gets a fresh token.
     (3, "ALTER TABLE sessions ADD COLUMN csrf_token TEXT NOT NULL DEFAULT ''"),
+    # v4: per-generation metrics for the BRD success measures.
+    (4, """
+    CREATE TABLE IF NOT EXISTS metrics (
+        id INTEGER PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        created REAL NOT NULL,
+        prep_seconds REAL,
+        generation_seconds REAL,
+        fields_total INTEGER NOT NULL DEFAULT 0,
+        fields_edited INTEGER NOT NULL DEFAULT 0,
+        exported INTEGER NOT NULL DEFAULT 0
+    );
+    """),
 ]
 
 

@@ -10,6 +10,7 @@ the server log only, never to the client.
 import logging
 import re
 import secrets
+import time
 from typing import Annotated, Literal
 
 from fastapi import (
@@ -23,7 +24,9 @@ from fastapi import (
     UploadFile,
 )
 
+from app.api.observability import record_generation
 from app.core import db
+from app.core import observability as obs
 from app.core.auth import require_user
 from app.core.config import get_settings
 from app.core.errors import PipelineError
@@ -155,6 +158,9 @@ async def generate_presentation(
             "buyer credit-limit table as an editable Excel file (BRD 2.6)."
         )),
     ] = "pptx",
+    fields_total: Annotated[int, Query(ge=0)] = 0,
+    fields_edited: Annotated[int, Query(ge=0)] = 0,
+    prep_seconds: Annotated[float | None, Query(ge=0)] = None,
 ) -> Response:
     """
     Render the BRD 2.8 presentation from the reviewed project state.
@@ -165,6 +171,7 @@ async def generate_presentation(
     versioning in this build. Nothing is sent from the system.
     """
     builder, extension, media_type = _EXPORT_BUILDERS[format]
+    started = time.monotonic()
     try:
         content = builder(request)
     except PipelineError as exc:
@@ -172,15 +179,24 @@ async def generate_presentation(
             exc, f"Export refused for {request.client_name!r}"
         ) from exc
     except Exception as exc:
+        obs.capture(exc, path="/generate-presentation", format=format)
         logger.exception("Presentation generation failed for %r", request.client_name)
         raise HTTPException(
             status_code=500,
             detail="Presentation generation failed unexpectedly. Check the server logs.",
         ) from exc
 
+    gen_seconds = round(time.monotonic() - started, 2)
+    obs.log_event("generation", project_id=project_id, format=format,
+                  duration_ms=int(gen_seconds * 1000), columns=len(request.columns))
     filename = suggested_filename(request, extension)
     if project_id:
         _store_export(project_id, format, filename, content, extension)
+        # One metrics row per generation event (pptx = the primary deliverable,
+        # so pdf/xlsx of the same project don't double-count).
+        if format == "pptx":
+            record_generation(project_id, prep_seconds, gen_seconds,
+                              fields_total, fields_edited)
     return Response(
         content=content,
         media_type=media_type,
@@ -263,6 +279,7 @@ async def extract_quote(
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
     # ── Pipeline ─────────────────────────────────────────────────────────
+    started = time.monotonic()
     try:
         result = await run_extraction_pipeline(file_bytes, filename, engine, file_kind)
         if project_id:
@@ -270,13 +287,20 @@ async def extract_quote(
                 project_id, doc_kind or "quote", filename,
                 file_bytes, result.meta.page_count,
             )
+        obs.log_event("extraction", project_id=project_id, kind=file_kind,
+                      engine=result.meta.extraction_engine,
+                      pages=result.meta.page_count,
+                      duration_ms=int((time.monotonic() - started) * 1000))
         return result
     except PipelineError as exc:
+        # Expected/handled failure (bad file, no creds) — client-safe message.
+        obs.log_event("extraction_failed", kind=file_kind, reason=type(exc).__name__)
         raise _http_from_pipeline_error(
             exc, f"Extraction rejected for {filename}"
         ) from exc
     except Exception as exc:
         # Unknown failure (SDK errors, bugs): opaque to the client.
+        obs.capture(exc, path="/extract-quote", kind=file_kind)
         logger.exception("Unexpected extraction failure for %s", filename)
         raise HTTPException(
             status_code=502,

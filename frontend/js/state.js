@@ -173,7 +173,7 @@ export function monthLabel() {
 export function createProject() {
   const n = 2400 + state.projects.length + 1;
   const p = {
-    id: uid(), clientName: '', ref: 'UKCIB-' + n,
+    id: uid(), created: Date.now(), clientName: '', ref: 'UKCIB-' + n,
     projectType: 'new', policyType: 'Whole Turnover',
     approached: [], columns: [], files: [],
     credit: [],               // { id, buyer, reg, req, offers: {colId: val} }

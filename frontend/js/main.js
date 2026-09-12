@@ -255,6 +255,30 @@ document.addEventListener('drop', e => {
   if (files.length) uploadFiles(zone.dataset.drop, files);
 });
 
+/* ── Error reporting ───────────────────────────────────────────────────
+   Capture unhandled errors and report them same-origin to /client-error
+   (the backend scrubs and forwards to Sentry). No third-party SDK, so the
+   strict CSP (script-src 'self') stays intact. */
+function reportClientError(kind, message, where, stack) {
+  try {
+    fetch('/client-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind, message: String(message || '').slice(0, 500),
+        where: String(where || location.pathname).slice(0, 200),
+        stack: String(stack || '').slice(0, 4000),
+      }),
+    }).catch(() => {});
+  } catch (e) { /* never let the reporter throw */ }
+}
+window.addEventListener('error', e =>
+  reportClientError('error', e.message, e.filename, e.error && e.error.stack));
+window.addEventListener('unhandledrejection', e =>
+  reportClientError('unhandledrejection',
+    (e.reason && e.reason.message) || e.reason, location.pathname,
+    e.reason && e.reason.stack));
+
 /* ── Boot ──────────────────────────────────────────────────────────── */
 render();                       // login screen paints immediately
 boot().then(render);            // an existing session goes to the list
