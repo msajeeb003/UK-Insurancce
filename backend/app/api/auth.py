@@ -32,6 +32,8 @@ def login(body: LoginRequest, request: Request, response: Response) -> dict:
     if result is None:
         raise HTTPException(status_code=401, detail="Wrong email or password.")
     token, csrf = result
+    from app.core import audit
+    audit.record("login", actor=body.email.strip().lower(), ip=ip)
     response.set_cookie(
         auth.COOKIE_NAME, token,
         httponly=True, samesite="lax",

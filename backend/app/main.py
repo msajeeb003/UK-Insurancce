@@ -24,6 +24,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.audit import router as audit_router
 from app.api.auth import router as auth_router
 from app.api.observability import router as observability_router
 from app.api.projects import router as projects_router
@@ -67,6 +68,7 @@ app.include_router(router)
 app.include_router(auth_router)
 app.include_router(projects_router)
 app.include_router(observability_router)
+app.include_router(audit_router)
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="frontend")
 
 

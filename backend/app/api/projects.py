@@ -7,12 +7,13 @@ stores it verbatim, never edits it. No versioning in this build.
 
 import json
 import shutil
+from typing import Annotated
 
 import pymupdf
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
-from app.core import db
+from app.core import audit, db
 from app.core.auth import require_user
 from app.core.config import get_settings
 
@@ -33,15 +34,27 @@ def list_projects() -> dict:
 
 
 @router.post("/projects")
-def save_project(body: ProjectState) -> dict:
+def save_project(body: ProjectState,
+                 user: Annotated[dict, Depends(require_user)]) -> dict:
     blob = json.dumps(body.state)
     if len(blob) > _MAX_STATE_BYTES:
         raise HTTPException(status_code=413, detail="Project state too large.")
+    existed = db.query_one("SELECT 1 AS x FROM projects WHERE id=?", (body.id,))
+    state = body.state
     db.execute(
         "INSERT INTO projects (id, client_name, updated, state) VALUES (?,?,?,?) "
         "ON CONFLICT(id) DO UPDATE SET client_name=excluded.client_name, "
         "updated=excluded.updated, state=excluded.state",
-        (body.id, str(body.state.get("clientName") or ""), db.now(), blob),
+        (body.id, str(state.get("clientName") or ""), db.now(), blob),
+    )
+    # Metadata-only audit: which key values are confirmed and the chosen
+    # recommendation travel in the saved state — no document contents.
+    confirmed = [k for k, v in (state.get("confirmed") or {}).items() if v]
+    audit.record(
+        "project.create" if not existed else "project.save",
+        target=body.id, actor=user["email"],
+        client_name=str(state.get("clientName") or ""),
+        confirmed=confirmed, recommended=state.get("recommended"),
     )
     return {"ok": True}
 
@@ -63,12 +76,15 @@ def delete_project_data(project_id: str) -> None:
 
 
 @router.delete("/projects/{project_id}")
-def delete_project(project_id: str) -> dict:
+def delete_project(project_id: str,
+                   user: Annotated[dict, Depends(require_user)]) -> dict:
     """Right-to-erasure (BRD 2.11): an admin deletes a client/project on
     request, removing all DB rows and files. Note: point-in-time backups made
     before now still contain it until they age out of the backup retention
     window (see docs/DATA_RETENTION.md)."""
     delete_project_data(project_id)
+    # The audit entry deliberately survives the deletion (append-only).
+    audit.record("project.delete", target=project_id, actor=user["email"])
     return {"ok": True}
 
 

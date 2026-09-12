@@ -106,6 +106,24 @@ MIGRATIONS: list[tuple[int, str]] = [
     """),
     # v6: session inactivity tracking (0 = grandfathered / not yet seen).
     (6, "ALTER TABLE sessions ADD COLUMN last_seen REAL NOT NULL DEFAULT 0"),
+    # v7: append-only audit trail. Triggers block UPDATE/DELETE at the DB
+    # level, so entries are immutable even against the app or a manual client.
+    (7, """
+    CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY,
+        ts REAL NOT NULL,
+        actor TEXT NOT NULL,
+        action TEXT NOT NULL,
+        target TEXT NOT NULL DEFAULT '',
+        detail TEXT NOT NULL DEFAULT '{}'
+    );
+    CREATE TRIGGER IF NOT EXISTS audit_log_no_update
+        BEFORE UPDATE ON audit_log
+        BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS audit_log_no_delete
+        BEFORE DELETE ON audit_log
+        BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+    """),
 ]
 
 

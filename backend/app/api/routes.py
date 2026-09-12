@@ -25,7 +25,7 @@ from fastapi import (
 )
 
 from app.api.observability import record_generation
-from app.core import db
+from app.core import audit, db
 from app.core import observability as obs
 from app.core.auth import require_user
 from app.core.config import get_settings
@@ -140,9 +140,10 @@ def _store_export(project_id: str, format: str, filename: str,
     )
 
 
-@router.post("/generate-presentation", dependencies=[Depends(require_user)])
+@router.post("/generate-presentation")
 async def generate_presentation(
     request: PresentationRequest,
+    user: Annotated[dict, Depends(require_user)],
     project_id: Annotated[
         str | None,
         Query(max_length=64, description=(
@@ -190,6 +191,10 @@ async def generate_presentation(
     obs.log_event("generation", project_id=project_id, format=format,
                   duration_ms=int(gen_seconds * 1000), columns=len(request.columns))
     filename = suggested_filename(request, extension)
+    audit.record("export", target=project_id or request.client_name,
+                 actor=user["email"], format=format,
+                 recommended=request.recommended_id,
+                 confirmed=len(request.confirmed_fields), columns=len(request.columns))
     if project_id:
         _store_export(project_id, format, filename, content, extension)
         # One metrics row per generation event (pptx = the primary deliverable,
@@ -238,9 +243,9 @@ async def _read_capped(file: UploadFile, max_bytes: int) -> bytes:
     return b"".join(chunks)
 
 
-@router.post("/extract-quote", response_model=ExtractionResponse,
-             dependencies=[Depends(require_user)])
+@router.post("/extract-quote", response_model=ExtractionResponse)
 async def extract_quote(
+    user: Annotated[dict, Depends(require_user)],
     file: Annotated[
         UploadFile,
         File(description="Insurer quote, credit-limit schedule or policy document (PDF/xlsx)"),
@@ -287,6 +292,10 @@ async def extract_quote(
                 project_id, doc_kind or "quote", filename,
                 file_bytes, result.meta.page_count,
             )
+            audit.record("document.upload", target=result.meta.document_id,
+                         actor=user["email"], project_id=project_id,
+                         kind=doc_kind or "quote", filename=filename,
+                         pages=result.meta.page_count)
         # Audit metadata only — provider/model/engine/pages/timing, never
         # any document content or buyer data.
         obs.log_event("extraction", project_id=project_id, kind=file_kind,
