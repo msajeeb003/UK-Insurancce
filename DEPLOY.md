@@ -33,6 +33,9 @@ it straight from GitHub.
 
 5. Settings → Networking → **Generate Domain** → HTTPS is automatic.
    Open the URL, sign in with the admin credentials.
+6. **Backups & recovery (required for production): see [BACKUP.md](BACKUP.md)**
+   — the `/data` volume plus encrypted offsite backups, scheduling and the
+   tested restore runbook.
 
 **Render** works the same way (New Web Service → this repo → Docker,
 region Frankfurt, add a Disk mounted at `/data`, same variables) — but

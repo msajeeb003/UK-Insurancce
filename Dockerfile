@@ -23,18 +23,17 @@ RUN if [ "$INSTALL_OCR" = "1" ]; then \
 
 COPY backend backend
 COPY frontend frontend
+COPY entrypoint.sh entrypoint.sh
 
-# SQLite DB + retained documents + exports — mount a volume here.
+# Make the `app` package importable for gunicorn AND `python -m app.backup`.
+ENV PYTHONPATH=/srv/backend
+# SQLite DB + retained documents + exports — mount a persistent volume here.
 ENV DATA_DIR=/data
-RUN mkdir -p /data
+RUN mkdir -p /data && chmod +x entrypoint.sh
 
 EXPOSE 8000
-# Gunicorn runs several Uvicorn (ASGI) workers behind one port:
-#   * PORT       — injected by Railway/Render (default 8000).
-#   * WORKERS    — explicit worker count; falls back to WEB_CONCURRENCY,
-#                  then 2. Raise it for more concurrent load / CPU cores.
-#   * --timeout 180 — an extraction waits 1-2 min on the LLM; the default
-#                  30s would kill the worker mid-request.
-#   * --pythonpath backend — makes the `app` package importable (the code
-#                  lives in /srv/backend).
-CMD ["sh", "-c", "gunicorn app.main:app -k uvicorn.workers.UvicornWorker --workers ${WORKERS:-${WEB_CONCURRENCY:-2}} --bind 0.0.0.0:${PORT:-8000} --pythonpath backend --timeout 180"]
+# entrypoint.sh takes a pre-start safety backup, then launches gunicorn with
+# several Uvicorn workers (--timeout 180 because an extraction waits 1-2 min
+# on the LLM; the default 30s would kill the worker mid-request). WORKERS
+# falls back to WEB_CONCURRENCY, then 2.
+CMD ["sh", "entrypoint.sh"]

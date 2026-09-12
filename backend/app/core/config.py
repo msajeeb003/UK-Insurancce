@@ -66,6 +66,22 @@ class Settings(BaseSettings):
     # Set COOKIE_SECURE=true behind HTTPS in production.
     cookie_secure: bool = False
 
+    # ── Backups (durability / recoverability) ───────────────────────────
+    # Fernet key (url-safe base64, 32 bytes) — `python -m app.backup gen-key`.
+    # Empty = backups disabled (the app runs; the pre-start hook no-ops).
+    backup_encryption_key: SecretStr = SecretStr("")
+    # Offsite target. Set EITHER an S3-compatible bucket OR a directory
+    # (a second mounted volume, or local for testing).
+    backup_s3_bucket: str = ""
+    backup_s3_endpoint: str = ""      # e.g. https://<acct>.r2.cloudflarestorage.com; empty = AWS
+    backup_s3_region: str = "eu-central-1"
+    backup_s3_access_key: SecretStr = SecretStr("")
+    backup_s3_secret_key: SecretStr = SecretStr("")
+    backup_offsite_dir: str = ""      # directory offsite target (alternative to S3)
+    backup_retention_daily: int = 30
+    backup_retention_monthly: int = 12
+    backup_alert_webhook: str = ""    # optional: POST {text} here on backup/integrity failure
+
     # ── Guard rails ──────────────────────────────────────────────────────
     max_upload_mb: int = 25
     # Documents longer than this are rejected before any paid API call —
