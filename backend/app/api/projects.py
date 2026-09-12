@@ -46,18 +46,29 @@ def save_project(body: ProjectState) -> dict:
     return {"ok": True}
 
 
-@router.delete("/projects/{project_id}")
-def delete_project(project_id: str) -> dict:
-    """Deletion on request (BRD 2.11 retention): removes the project, its
-    retained documents and its generated exports — atomically, so a crash
-    midway can never leave a half-deleted project behind."""
+def delete_project_data(project_id: str) -> None:
+    """Erase a project everywhere in live storage: DB rows (documents,
+    exports, metrics, the project) atomically, then its files. Reused by the
+    on-request delete and the scheduled retention purge. Idempotent — safe to
+    call for an already-deleted project. Files go LAST (a filesystem delete
+    cannot be rolled back, so the recoverable DB delete commits first)."""
     db.execute_transaction([
         ("DELETE FROM documents WHERE project_id=?", (project_id,)),
         ("DELETE FROM exports WHERE project_id=?", (project_id,)),
+        ("DELETE FROM metrics WHERE project_id=?", (project_id,)),
         ("DELETE FROM projects WHERE id=?", (project_id,)),
     ])
     folder = get_settings().data_path / "projects" / project_id
     shutil.rmtree(folder, ignore_errors=True)
+
+
+@router.delete("/projects/{project_id}")
+def delete_project(project_id: str) -> dict:
+    """Right-to-erasure (BRD 2.11): an admin deletes a client/project on
+    request, removing all DB rows and files. Note: point-in-time backups made
+    before now still contain it until they age out of the backup retention
+    window (see docs/DATA_RETENTION.md)."""
+    delete_project_data(project_id)
     return {"ok": True}
 
 

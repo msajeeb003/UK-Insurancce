@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 _PROD = is_production()
 
 _SESSION_CLEANUP_INTERVAL = 3600   # seconds between expired-session sweeps
+_RETENTION_INTERVAL = 86400        # seconds between retention purges (daily)
 _background_tasks: set[asyncio.Task] = set()
 
 # backend/app/main.py -> repo root -> frontend/ (kept fully separate from
@@ -112,6 +113,27 @@ async def _start_session_cleanup() -> None:
             await asyncio.sleep(_SESSION_CLEANUP_INTERVAL)
 
     # Keep a reference so the task is not garbage-collected mid-run.
+    task = asyncio.create_task(loop())
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+
+
+@app.on_event("startup")
+async def _start_retention_purge() -> None:
+    """Hard-delete projects past RETENTION_DAYS, once at startup then daily.
+    No-op when retention is disabled. Idempotent, so running per worker is
+    safe; a Railway cron on `python -m app.retention run` works too."""
+    from app.retention import purge_expired
+
+    async def loop() -> None:
+        while True:
+            try:
+                if get_settings().retention_days > 0:
+                    await asyncio.to_thread(purge_expired)
+            except Exception:
+                logger.exception("Retention purge failed")
+            await asyncio.sleep(_RETENTION_INTERVAL)
+
     task = asyncio.create_task(loop())
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)

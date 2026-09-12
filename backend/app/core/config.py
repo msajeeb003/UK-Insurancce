@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     session_ttl_hours: int = 72
     # Set COOKIE_SECURE=true behind HTTPS in production.
     cookie_secure: bool = False
+    # Data retention (BRD 2.11): hard-delete projects untouched for longer
+    # than this many days. 0 = disabled (keep forever) — the period is the
+    # client's decision, so nothing is deleted until they set it.
+    retention_days: int = 0
 
     # ── Backups (durability / recoverability) ───────────────────────────
     # Fernet key (url-safe base64, 32 bytes) — `python -m app.backup gen-key`.
