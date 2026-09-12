@@ -14,5 +14,5 @@ pydantic==2.13.5
 pydantic-settings==2.15.0
 python-dotenv==1.2.3
 cryptography==50.0.1      # Fernet-encrypted backups
-boto3==1.35.36            # S3-compatible offsite backup upload (lazy-imported)
+boto3==1.43.90            # S3-compatible offsite backup upload (lazy-imported)
 sentry-sdk==2.69.1        # error tracking (DSN-gated; no-op when unset)
