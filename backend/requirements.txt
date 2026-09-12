@@ -1,7 +1,7 @@
 # Runtime dependencies — pinned to the versions the pilot was tested with.
 fastapi==0.141.1
 uvicorn[standard]==0.52.4
-gunicorn==23.0.0          # multi-worker process manager (production, Linux)
+gunicorn==26.2.0          # multi-worker process manager (production, Linux)
 python-multipart==0.0.32
 PyMuPDF==1.28.2
 azure-ai-documentintelligence==1.0.2
