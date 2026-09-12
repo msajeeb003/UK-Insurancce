@@ -54,6 +54,7 @@ def test_prod_boots_when_configured(monkeypatch):
     monkeypatch.setattr(s, "cookie_secure", True)
     monkeypatch.setattr(s, "admin_password", SecretStr("Zurich-Atradius-2026!"))
     monkeypatch.setattr(s, "anthropic_api_key", SecretStr("sk-ant-test"))
+    monkeypatch.setattr(s, "llm_no_training_ack", True)   # DPA filed
     startup.run_startup_checks()          # no raise
 
 

@@ -63,10 +63,21 @@ def run_startup_checks() -> None:
                 "No LLM provider key set (ANTHROPIC_API_KEY or OPENAI_API_KEY)."
             )
 
+    # No-training / no-retention posture on the provider path — enforced
+    # whenever a provider is configured, in any environment (a bad host is
+    # always fatal; a missing DPA ack is fatal only in production).
+    if s.anthropic_api_key.get_secret_value() or s.openai_api_key.get_secret_value():
+        from app.core.errors import ConfigurationError
+        from app.llm.policy import assert_no_training_posture
+        from app.llm.router import resolve_provider
+        try:
+            assert_no_training_posture(resolve_provider())
+        except ConfigurationError as exc:
+            fatal.append(str(exc))
+
     if fatal:
         raise RuntimeError(
-            "Refusing to start — production configuration errors:\n - "
-            + "\n - ".join(fatal)
+            "Refusing to start — configuration errors:\n - " + "\n - ".join(fatal)
         )
 
     # Non-fatal advisories (don't block boot, but should be addressed).

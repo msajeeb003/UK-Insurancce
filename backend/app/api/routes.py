@@ -287,8 +287,11 @@ async def extract_quote(
                 project_id, doc_kind or "quote", filename,
                 file_bytes, result.meta.page_count,
             )
+        # Audit metadata only — provider/model/engine/pages/timing, never
+        # any document content or buyer data.
         obs.log_event("extraction", project_id=project_id, kind=file_kind,
                       engine=result.meta.extraction_engine,
+                      llm_model=result.meta.llm_model,
                       pages=result.meta.page_count,
                       duration_ms=int((time.monotonic() - started) * 1000))
         return result

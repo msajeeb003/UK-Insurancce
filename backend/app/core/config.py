@@ -87,6 +87,15 @@ class Settings(BaseSettings):
     # ADMIN_PASSWORD, an LLM key) and disables the interactive API docs.
     app_env: str = "development"
 
+    # ── LLM data-processing posture (see docs/DATA_PROCESSING.md) ─────────
+    # Confidential data only ever goes to an approved official endpoint whose
+    # commercial terms exclude training. A custom base_url pointing anywhere
+    # else (a proxy/aggregator) is rejected.
+    llm_allowed_hosts: str = "api.anthropic.com,api.openai.com"
+    # The operator sets this to true once the provider DPA / zero-retention
+    # terms are filed. Required in production; a bad host fails always.
+    llm_no_training_ack: bool = False
+
     # ── Observability ────────────────────────────────────────────────────
     sentry_dsn: str = ""              # empty = Sentry disabled (no-op)
     sentry_environment: str = "production"
