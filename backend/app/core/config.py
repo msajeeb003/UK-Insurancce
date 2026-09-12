@@ -82,6 +82,11 @@ class Settings(BaseSettings):
     backup_retention_monthly: int = 12
     backup_alert_webhook: str = ""    # optional: POST {text} here on backup/integrity failure
 
+    # ── Environment ──────────────────────────────────────────────────────
+    # "production" turns on the strict startup checks (COOKIE_SECURE, strong
+    # ADMIN_PASSWORD, an LLM key) and disables the interactive API docs.
+    app_env: str = "development"
+
     # ── Observability ────────────────────────────────────────────────────
     sentry_dsn: str = ""              # empty = Sentry disabled (no-op)
     sentry_environment: str = "production"

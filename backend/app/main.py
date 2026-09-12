@@ -32,10 +32,13 @@ from app.core import auth as auth_core
 from app.core import observability as obs
 from app.core.auth import COOKIE_NAME, delete_expired_sessions, seed_admin_if_empty
 from app.core.config import get_settings
+from app.core.startup import is_production, run_startup_checks
 
 obs.configure_logging()          # JSON logs with request id / user id
+run_startup_checks()             # prod refuses to boot on an insecure config
 obs.init_sentry()                # DSN-gated; no-op when SENTRY_DSN unset
 logger = logging.getLogger(__name__)
+_PROD = is_production()
 
 _SESSION_CLEANUP_INTERVAL = 3600   # seconds between expired-session sweeps
 _background_tasks: set[asyncio.Task] = set()
@@ -52,6 +55,11 @@ app = FastAPI(
         "normalized, source-linked structured JSON."
     ),
     version="0.3.0",
+    # The interactive docs and OpenAPI schema are internal-only aids — turn
+    # them off entirely in production so nothing about the API is public.
+    docs_url=None if _PROD else "/docs",
+    redoc_url=None if _PROD else "/redoc",
+    openapi_url=None if _PROD else "/openapi.json",
 )
 
 app.include_router(router)

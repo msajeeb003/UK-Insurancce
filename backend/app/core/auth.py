@@ -59,6 +59,14 @@ def seed_admin_if_empty() -> None:
     email = settings.admin_email.strip().lower()
     password = settings.admin_password.get_secret_value()
     if email and password:
+        # Enforce the password policy at seed time (fatal in production; the
+        # startup check has already run, so this is defence in depth).
+        from app.core.startup import is_production, password_problem
+        problem = password_problem(password)
+        if problem and is_production():
+            raise RuntimeError(f"ADMIN_PASSWORD {problem}.")
+        if problem:
+            logger.warning("ADMIN_PASSWORD %s (allowed in development only)", problem)
         try:
             create_user(email, password)
             logger.info("Seeded initial user %s from ADMIN_EMAIL", email)
